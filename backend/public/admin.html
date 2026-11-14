@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Dashboard - Local Stream Hub</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    body { background-color: #0b0f19; color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  </style>
+</head>
+<body class="min-h-screen">
+  <!-- Navbar -->
+  <nav class="border-b border-slate-800 bg-slate-900/60 backdrop-blur px-6 py-4 flex items-center justify-between sticky top-0 z-50">
+    <div class="flex items-center space-x-3">
+      <div class="w-9 h-9 rounded-lg bg-indigo-600 flex items-center justify-center font-bold text-white shadow-lg shadow-indigo-500/30">
+        <i class="fa-solid fa-tower-broadcast"></i>
+      </div>
+      <div>
+        <h1 class="font-bold text-lg leading-tight">Admin Control Hub</h1>
+        <p class="text-xs text-slate-400">Wi-Fi Streamer: <span class="text-emerald-400 font-mono" id="networkIpText">http://192.168.0.105:9086</span></p>
+      </div>
+    </div>
+    <div class="flex items-center space-x-3">
+      <button onclick="openNetworkModal()" class="text-xs bg-indigo-600/20 text-indigo-300 hover:bg-indigo-600/30 px-3 py-2 rounded-lg border border-indigo-500/30 transition flex items-center gap-1.5">
+        <i class="fa-solid fa-wifi"></i> Wi-Fi & Domain Settings
+      </button>
+      <a href="/" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-2 rounded-lg transition border border-slate-700 flex items-center gap-1.5">
+        <i class="fa-solid fa-play"></i> Open User Portal
+      </a>
+      <button onclick="logoutAdmin()" class="text-xs bg-rose-600/20 text-rose-300 hover:bg-rose-600/30 px-3 py-2 rounded-lg border border-rose-500/30 transition">
+        <i class="fa-solid fa-arrow-right-from-bracket"></i> Lock
+      </button>
+    </div>
+  </nav>
+
+  <!-- Login Modal (if not authenticated) -->
+  <div id="authGate" class="fixed inset-0 bg-slate-950/90 backdrop-blur z-50 flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-6 text-center shadow-2xl">
+      <div class="w-14 h-14 rounded-full bg-indigo-500/10 text-indigo-400 flex items-center justify-center mx-auto mb-4 text-2xl border border-indigo-500/20">
+        <i class="fa-solid fa-shield-halved"></i>
+      </div>
+      <h2 class="text-xl font-bold mb-1">Admin Authentication</h2>
+      <p class="text-sm text-slate-400 mb-6">Enter your Admin Secret Key to manage devices and upload media.</p>
+      <form onsubmit="handleAdminLogin(event)" class="space-y-4">
+        <input type="password" id="adminKeyInput" placeholder="Enter Admin Secret Key" value="admin1234" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-center tracking-wider text-white focus:outline-none focus:border-indigo-500" required>
+        <button type="submit" class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-semibold transition shadow-lg shadow-indigo-600/30">
+          Unlock Dashboard
+        </button>
+      </form>
+      <p id="authError" class="text-xs text-rose-400 mt-3 hidden"></p>
+    </div>
+  </div>
+
+  <!-- Dashboard Container -->
+  <main class="max-w-7xl mx-auto px-6 py-8 space-y-8">
+    <!-- Grid: Device Admissions & Quick Upload -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      
+      <!-- Card 1: Admit Devices (Jellyfin Style) -->
+      <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-xl lg:col-span-1 flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="font-bold text-base flex items-center gap-2">
+              <i class="fa-solid fa-mobile-screen text-indigo-400"></i> Admit New Device
+            </h2>
+            <span class="text-xs bg-slate-800 text-slate-400 px-2 py-1 rounded-full border border-slate-700" id="pendingCountBadge">0 pending</span>
+          </div>
+          <p class="text-xs text-slate-400 mb-4">When a device clicks "Connect", type their 6-digit pairing code below to give them access.</p>
+
+          <form onsubmit="handleApproveCode(event)" class="space-y-3 mb-6">
+            <input type="text" id="manualPairCode" placeholder="e.g. 648-527" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-center font-mono text-xl tracking-widest text-emerald-400 uppercase focus:outline-none focus:border-indigo-500" required>
+            <button type="submit" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 font-semibold rounded-xl text-sm transition shadow-lg shadow-emerald-600/20">
+              <i class="fa-solid fa-check"></i> Authorize Device
+            </button>
+          </form>
+
+          <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Live Pending Requests:</h3>
+          <div id="pendingList" class="space-y-2 max-h-48 overflow-y-auto pr-1">
+            <p class="text-xs text-slate-500 text-center py-4">No devices currently waiting.</p>
+          </div>
+        </div>
+
+        <div class="mt-6 pt-4 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
+          <span>Admitted Devices:</span>
+          <span class="font-mono text-indigo-400 font-bold" id="admittedCount">0</span>
+        </div>
+      </div>
+
+      <!-- Card 2: Upload Media to Cloudinary -->
+      <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-xl lg:col-span-2">
+        <h2 class="font-bold text-base mb-1 flex items-center gap-2">
+          <i class="fa-solid fa-cloud-arrow-up text-indigo-400"></i> Upload Media (Video, Audio, Image)
+        </h2>
+        <p class="text-xs text-slate-400 mb-4">Files are stored securely in Cloudinary and streamed in chunks to admitted devices.</p>
+
+        <form id="uploadForm" onsubmit="handleUpload(event)" class="space-y-4">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-medium text-slate-300 mb-1">Title</label>
+              <input type="text" id="uploadTitle" placeholder="e.g. Vacation Video, Lo-Fi Track" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-300 mb-1">Select File (MP4, MP3, PNG, JPG)</label>
+              <input type="file" id="uploadFileInput" accept="video/mp4,audio/mpeg,audio/mp3,image/*" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-300 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-600 file:text-white hover:file:bg-indigo-500 cursor-pointer" required>
+            </div>
+          </div>
+
+          <!-- Progress Bar -->
+          <div id="uploadProgressContainer" class="hidden space-y-1">
+            <div class="flex justify-between text-xs text-slate-400">
+              <span id="uploadStatusText">Uploading to Cloudinary...</span>
+              <span id="uploadPercentText" class="font-mono text-indigo-400">0%</span>
+            </div>
+            <div class="w-full bg-slate-950 h-2.5 rounded-full overflow-hidden border border-slate-800">
+              <div id="uploadProgressBar" class="bg-indigo-600 h-full w-0 transition-all duration-300"></div>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between pt-2">
+            <span class="text-xs text-slate-500"><i class="fa-solid fa-lock text-emerald-400"></i> Encrypted Chunk Streaming Ready</span>
+            <button type="submit" id="uploadBtn" class="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 font-semibold rounded-xl text-sm transition shadow-lg shadow-indigo-600/30 flex items-center gap-2">
+              <i class="fa-solid fa-upload"></i> Upload Media
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Section: One-Click Fast Access Link Generator -->
+    <div class="bg-gradient-to-r from-slate-900 via-indigo-950/40 to-slate-900 border border-indigo-500/30 rounded-2xl p-6 shadow-xl space-y-4">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <span class="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 mb-2">
+            <i class="fa-solid fa-bolt mr-1"></i> Fast Stream Access Link Generator
+          </span>
+          <h2 class="font-bold text-lg text-white">Generate 1-Click Fast Stream Link</h2>
+          <p class="text-xs text-slate-400">Select network interface & click to create a pre-approved fast link (no code needed for guests)</p>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <select id="quickNetworkSelect" class="bg-slate-950 border border-slate-700 text-xs text-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:border-indigo-500">
+            <option value="wifi">🚀 Wi-Fi Local (Fastest - 1000 Mbps)</option>
+            <option value="mdns">🍏 Apple mDNS (.local Hostname)</option>
+            <option value="domain">🌐 Cloudflare (stream.nikhilkohli.com)</option>
+          </select>
+          <button onclick="handleGenerateFastLink()" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 font-semibold rounded-xl text-xs text-white shadow-lg shadow-indigo-600/30 transition flex items-center gap-2 shrink-0">
+            <i class="fa-solid fa-wand-magic-sparkles"></i> Generate Fast Link
+          </button>
+        </div>
+      </div>
+
+      <!-- Generated Link Box (Initially Hidden) -->
+      <div id="quickLinkResultBox" class="hidden bg-slate-950/80 border border-slate-800 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-4 w-full overflow-hidden">
+          <div id="quickLinkQr" class="p-1.5 bg-white rounded-lg shrink-0"></div>
+          <div class="truncate w-full space-y-1">
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-bold text-emerald-400"><i class="fa-solid fa-circle-check"></i> Pre-Approved Fast Pass Active</span>
+              <span class="text-[10px] text-slate-500 font-mono">(Valid for 7 days)</span>
+            </div>
+            <div id="quickLinkUrlText" class="text-xs font-mono text-indigo-300 truncate bg-slate-900 p-2 rounded-lg border border-slate-800"></div>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 shrink-0 w-full md:w-auto">
+          <button onclick="copyQuickLink()" class="flex-1 md:flex-initial px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold transition border border-slate-700 flex items-center justify-center gap-1.5">
+            <i class="fa-regular fa-copy"></i> Copy Link
+          </button>
+          <a id="quickLinkOpenBtn" href="#" target="_blank" class="flex-1 md:flex-initial px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5">
+            <i class="fa-solid fa-arrow-up-right-from-square"></i> Open
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section: Media Library Management -->
+    <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-xl">
+      <div class="flex items-center justify-between mb-6">
+        <div>
+          <h2 class="font-bold text-lg flex items-center gap-2">
+            <i class="fa-solid fa-film text-indigo-400"></i> Media Library
+          </h2>
+          <p class="text-xs text-slate-400">All uploaded media items available for streaming</p>
+        </div>
+        <button onclick="fetchMediaList()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700 transition flex items-center gap-1.5">
+          <i class="fa-solid fa-rotate"></i> Refresh
+        </button>
+      </div>
+
+      <!-- Media Grid -->
+      <div id="mediaGrid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <!-- Dynamically rendered -->
+      </div>
+    </div>
+  </main>
+
+  <!-- Wi-Fi & Network Settings Modal -->
+  <div id="networkModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-6 space-y-6 shadow-2xl relative">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center text-lg border border-indigo-500/20">
+            <i class="fa-solid fa-tower-broadcast"></i>
+          </div>
+          <div>
+            <h3 class="font-bold text-base">Wi-Fi & Network Configuration</h3>
+            <p class="text-xs text-slate-400">Connect from any Wi-Fi router or custom domain</p>
+          </div>
+        </div>
+        <button onclick="closeNetworkModal()" class="w-8 h-8 rounded-full bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center transition">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <!-- QR Code & Quick Scan -->
+      <div class="flex flex-col sm:flex-row items-center gap-6 bg-slate-950 p-4 rounded-2xl border border-slate-800/80">
+        <div id="qrcodeBox" class="p-2 bg-white rounded-xl shadow-lg shrink-0"></div>
+        <div class="space-y-2 text-center sm:text-left">
+          <span class="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <i class="fa-solid fa-wifi mr-1"></i> Scan with Phone Camera
+          </span>
+          <h4 class="text-xs font-semibold text-slate-200">Point mobile camera to connect to this Wi-Fi stream</h4>
+          <p class="text-[11px] text-slate-400">No typing required. Open camera on any phone connected to this Wi-Fi network.</p>
+        </div>
+      </div>
+
+      <!-- Network Details -->
+      <div class="space-y-3">
+        <!-- Option 1: Friendly mDNS Domain (Works on ANY Wi-Fi without knowing IP!) -->
+        <div class="bg-slate-950/70 border border-slate-800 p-3.5 rounded-xl">
+          <div class="flex items-center justify-between text-xs mb-1">
+            <span class="text-slate-400 flex items-center gap-1.5 font-medium">
+              <i class="fa-solid fa-star text-amber-400"></i> Zero-Config Wi-Fi Domain (Permanent):
+            </span>
+            <span class="text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded">All Wi-Fi Networks</span>
+          </div>
+          <div class="flex items-center justify-between bg-slate-900 px-3 py-2 rounded-lg border border-slate-800 mt-1.5">
+            <span id="mdnsDisplay" class="font-mono text-xs text-indigo-400 truncate">Loading...</span>
+            <button onclick="copyToClipboard('mdnsDisplay')" class="text-slate-400 hover:text-white text-xs ml-2">
+              <i class="fa-regular fa-copy"></i>
+            </button>
+          </div>
+          <p class="text-[10px] text-slate-500 mt-1">✨ This never changes even if you switch Wi-Fi networks!</p>
+        </div>
+
+        <!-- Option 2: Current Numeric IP -->
+        <div class="bg-slate-950/70 border border-slate-800 p-3.5 rounded-xl">
+          <div class="flex items-center justify-between text-xs mb-1">
+            <span class="text-slate-400 flex items-center gap-1.5 font-medium">
+              <i class="fa-solid fa-network-wired text-indigo-400"></i> Current Wi-Fi IP Address:
+            </span>
+            <button onclick="fetchNetworkDetails()" class="text-[10px] text-indigo-400 hover:underline">
+              <i class="fa-solid fa-rotate mr-1"></i> Refresh IP
+            </button>
+          </div>
+          <div class="flex items-center justify-between bg-slate-900 px-3 py-2 rounded-lg border border-slate-800 mt-1.5">
+            <span id="directIpDisplay" class="font-mono text-xs text-emerald-400 truncate">Loading...</span>
+            <button onclick="copyToClipboard('directIpDisplay')" class="text-slate-400 hover:text-white text-xs ml-2">
+              <i class="fa-regular fa-copy"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Option 3: Online Cloudflare & Tunnel Controls -->
+        <div class="bg-slate-950/70 border border-slate-800 p-3.5 rounded-xl space-y-2">
+          <div class="flex items-center justify-between text-xs">
+            <span class="text-slate-400 flex items-center gap-1.5 font-medium">
+              <i class="fa-solid fa-globe text-cyan-400"></i> Online Public Access:
+            </span>
+            <span id="tunnelStatusBadge" class="text-[10px] px-2 py-0.5 rounded font-bold uppercase bg-slate-800 text-slate-400">Checking...</span>
+          </div>
+          
+          <div class="flex items-center justify-between bg-slate-900 px-3 py-2 rounded-lg border border-slate-800">
+            <span id="customDomainDisplay" class="font-mono text-xs text-cyan-300 truncate">https://stream.nikhilkohli.com</span>
+            <button onclick="copyToClipboard('customDomainDisplay')" class="text-slate-400 hover:text-white text-xs ml-2">
+              <i class="fa-regular fa-copy"></i>
+            </button>
+          </div>
+
+          <div class="flex items-center gap-2 pt-1">
+            <button id="toggleTunnelBtn" onclick="toggleOnlineTunnel()" class="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5">
+              <i class="fa-solid fa-play"></i> Start Online Tunnel
+            </button>
+          </div>
+
+          <div id="liveTunnelInfo" class="hidden bg-slate-900 p-2.5 rounded-lg border border-indigo-500/30 text-[11px] text-slate-300">
+            <div>Tunnel URL: <a id="liveTunnelUrl" href="#" target="_blank" class="text-indigo-400 underline font-mono"></a></div>
+            <div class="text-[10px] text-slate-400 mt-1">Tunnel Password: <span id="liveTunnelPass" class="font-mono text-emerald-400 font-bold"></span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pt-2 text-center">
+        <button onclick="closeNetworkModal()" class="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-xl text-xs transition">
+          Done
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    let currentAdminKey = localStorage.getItem('STREAM_ADMIN_KEY') || 'admin1234';
+
+    function getHeaders() {
+      return {
+        'x-admin-key': currentAdminKey
+      };
+    }
+
+    async function checkAuth() {
+      const errorElem = document.getElementById('authError');
+      if (!currentAdminKey) {
+        document.getElementById('authGate').classList.remove('hidden');
+        return;
+      }
+      try {
+        const res = await fetch('/api/v1/admin/verify', {
+          method: 'POST',
+          headers: getHeaders()
+        });
+        const data = await res.json();
+        if (data.success) {
+          if (errorElem) errorElem.classList.add('hidden');
+          document.getElementById('authGate').classList.add('hidden');
+          initDashboard();
+        } else {
+          document.getElementById('authGate').classList.remove('hidden');
+          if (errorElem) {
+            errorElem.innerText = data.error || 'Incorrect Admin Key';
+            errorElem.classList.remove('hidden');
+          }
+        }
+      } catch (e) {
+        document.getElementById('authGate').classList.remove('hidden');
+        if (errorElem) {
+          errorElem.innerText = 'Network error verifying key';
+          errorElem.classList.remove('hidden');
+        }
+      }
+    }
+
+    function handleAdminLogin(e) {
+      e.preventDefault();
+      const key = document.getElementById('adminKeyInput').value.trim();
+      currentAdminKey = key;
+      localStorage.setItem('STREAM_ADMIN_KEY', key);
+      let qrCodeInstance = null;
+
+    let isTunnelRunning = false;
+
+    async function fetchTunnelStatus() {
+      try {
+        const res = await fetch('/api/v1/admin/tunnel', { headers: getHeaders() });
+        const data = await res.json();
+        if (data.success) {
+          const info = data.data;
+          const badge = document.getElementById('tunnelStatusBadge');
+          const btn = document.getElementById('toggleTunnelBtn');
+          const liveInfo = document.getElementById('liveTunnelInfo');
+
+          if (info.status === 'ONLINE') {
+            isTunnelRunning = true;
+            badge.className = 'text-[10px] px-2 py-0.5 rounded font-bold uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+            badge.innerText = 'ONLINE';
+            btn.className = 'flex-1 py-2 bg-rose-600/80 hover:bg-rose-600 text-white rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5';
+            btn.innerHTML = '<i class="fa-solid fa-stop"></i> Stop Online Tunnel';
+
+            liveInfo.classList.remove('hidden');
+            const urlLink = document.getElementById('liveTunnelUrl');
+            urlLink.href = info.tunnelUrl;
+            urlLink.innerText = info.tunnelUrl;
+            document.getElementById('liveTunnelPass').innerText = info.tunnelPassword || 'None';
+          } else {
+            isTunnelRunning = false;
+            badge.className = 'text-[10px] px-2 py-0.5 rounded font-bold uppercase bg-slate-800 text-slate-400 border border-slate-700';
+            badge.innerText = 'OFFLINE';
+            btn.className = 'flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5';
+            btn.innerHTML = '<i class="fa-solid fa-play"></i> Start Online Tunnel';
+            liveInfo.classList.add('hidden');
+          }
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    async function toggleOnlineTunnel() {
+      const btn = document.getElementById('toggleTunnelBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Switching...';
+
+      const action = isTunnelRunning ? 'stop' : 'start';
+      try {
+        const res = await fetch(`/api/v1/admin/tunnel/${action}`, {
+          method: 'POST',
+          headers: getHeaders()
+        });
+        const data = await res.json();
+        if (data.success) {
+          await fetchTunnelStatus();
+        } else {
+          alert(data.error || 'Failed to toggle tunnel');
+        }
+      } catch (e) {
+        alert('Network error switching tunnel');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function openNetworkModal() {
+      document.getElementById('networkModal').classList.remove('hidden');
+      await fetchNetworkDetails();
+      await fetchTunnelStatus();
+    }
+
+    function closeNetworkModal() {
+      document.getElementById('networkModal').classList.add('hidden');
+    }
+
+    async function fetchNetworkDetails() {
+      try {
+        const res = await fetch('/api/v1/admin/network', { headers: getHeaders() });
+        const data = await res.json();
+        if (data.success) {
+          const { directWifiUrl, mdnsUrl } = data.data;
+          document.getElementById('mdnsDisplay').innerText = mdnsUrl;
+          document.getElementById('directIpDisplay').innerText = directWifiUrl;
+          document.getElementById('networkIpText').innerText = directWifiUrl;
+
+          // Render QR Code
+          const qrBox = document.getElementById('qrcodeBox');
+          qrBox.innerHTML = '';
+          qrCodeInstance = new QRCode(qrBox, {
+            text: directWifiUrl,
+            width: 108,
+            height: 108,
+            colorDark: "#000000",
+            colorLight: "#ffffff",
+            correctLevel: QRCode.CorrectLevel.M
+          });
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    function copyToClipboard(elementId) {
+      const text = document.getElementById(elementId).innerText;
+      navigator.clipboard.writeText(text);
+      alert('Copied to clipboard: ' + text);
+    }
+
+    let quickQrInstance = null;
+    let currentGeneratedUrl = '';
+
+    async function handleGenerateFastLink() {
+      const select = document.getElementById('quickNetworkSelect');
+      const networkType = select.value;
+
+      try {
+        const res = await fetch('/api/v1/admin/quick-link', {
+          method: 'POST',
+          headers: { ...getHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ networkType })
+        });
+        const data = await res.json();
+        if (data.success) {
+          const { accessUrl } = data.data;
+          currentGeneratedUrl = accessUrl;
+
+          document.getElementById('quickLinkUrlText').innerText = accessUrl;
+          document.getElementById('quickLinkOpenBtn').href = accessUrl;
+          document.getElementById('quickLinkResultBox').classList.remove('hidden');
+
+          // Render QR code
+          const qrBox = document.getElementById('quickLinkQr');
+          qrBox.innerHTML = '';
+          quickQrInstance = new QRCode(qrBox, {
+            text: accessUrl,
+            width: 72,
+            height: 72,
+            colorDark: "#000000",
+            colorLight: "#ffffff",
+            correctLevel: QRCode.CorrectLevel.M
+          });
+        } else {
+          alert(data.error || 'Failed to generate link');
+        }
+      } catch (e) {
+        alert('Network error generating link');
+      }
+    }
+
+    function copyQuickLink() {
+      if (!currentGeneratedUrl) return;
+      navigator.clipboard.writeText(currentGeneratedUrl);
+      alert('Copied 1-Click Fast Stream Link to clipboard!');
+    }
+
+    checkAuth();
+    }
+
+    function logoutAdmin() {
+      localStorage.removeItem('STREAM_ADMIN_KEY');
+      currentAdminKey = '';
+      document.getElementById('authGate').classList.remove('hidden');
+    }
+
+    async function initDashboard() {
+      await fetchPendingDevices();
+      await fetchActiveDevicesCount();
+      await fetchMediaList();
+      setInterval(fetchPendingDevices, 5000);
+    }
+
+    async function fetchPendingDevices() {
+      try {
+        const res = await fetch('/api/v1/admin/pending', { headers: getHeaders() });
+        const data = await res.json();
+        const list = document.getElementById('pendingList');
+        document.getElementById('pendingCountBadge').innerText = `${data.count || 0} pending`;
+
+        if (!data.data || data.data.length === 0) {
+          list.innerHTML = `<p class="text-xs text-slate-500 text-center py-4">No devices currently waiting.</p>`;
+          return;
+        }
+
+        list.innerHTML = data.data.map(d => `
+          <div class="bg-slate-950 border border-slate-800 p-2.5 rounded-xl flex items-center justify-between">
+            <div>
+              <div class="font-mono font-bold text-emerald-400 text-sm tracking-wider">${d.pairingCode}</div>
+              <div class="text-[10px] text-slate-400 truncate max-w-[130px]">${d.ipAddress}</div>
+            </div>
+            <button onclick="approveDirect('${d.pairingCode}')" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold transition">
+              Admit
+            </button>
+          </div>
+        `).join('');
+      } catch (e) { console.error(e); }
+    }
+
+    async function fetchActiveDevicesCount() {
+      try {
+        const res = await fetch('/api/v1/admin/devices', { headers: getHeaders() });
+        const data = await res.json();
+        document.getElementById('admittedCount').innerText = data.count || 0;
+      } catch (e) {}
+    }
+
+    async function approveDirect(code) {
+      document.getElementById('manualPairCode').value = code;
+      handleApproveCode(new Event('submit'));
+    }
+
+    async function handleApproveCode(e) {
+      if (e) e.preventDefault();
+      const code = document.getElementById('manualPairCode').value.trim();
+      if (!code) return;
+
+      const res = await fetch('/api/v1/admin/approve', {
+        method: 'POST',
+        headers: { ...getHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(data.message);
+        document.getElementById('manualPairCode').value = '';
+        fetchPendingDevices();
+        fetchActiveDevicesCount();
+      } else {
+        alert(data.error || 'Failed to approve');
+      }
+    }
+
+    // Handle Upload
+    function handleUpload(e) {
+      e.preventDefault();
+      const fileInput = document.getElementById('uploadFileInput');
+      const titleInput = document.getElementById('uploadTitle');
+      if (!fileInput.files[0]) return;
+
+      const formData = new FormData();
+      formData.append('file', fileInput.files[0]);
+      formData.append('title', titleInput.value.trim() || fileInput.files[0].name);
+
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/api/v1/admin/upload', true);
+      xhr.setRequestHeader('x-admin-key', currentAdminKey);
+
+      const progressContainer = document.getElementById('uploadProgressContainer');
+      const progressBar = document.getElementById('uploadProgressBar');
+      const percentText = document.getElementById('uploadPercentText');
+      const uploadBtn = document.getElementById('uploadBtn');
+
+      progressContainer.classList.remove('hidden');
+      uploadBtn.disabled = true;
+
+      xhr.upload.onprogress = (evt) => {
+        if (evt.lengthComputable) {
+          const percent = Math.round((evt.loaded / evt.total) * 100);
+          progressBar.style.width = percent + '%';
+          percentText.innerText = percent + '%';
+        }
+      };
+
+      xhr.onload = () => {
+        uploadBtn.disabled = false;
+        progressContainer.classList.add('hidden');
+        progressBar.style.width = '0%';
+        try {
+          const resp = JSON.parse(xhr.responseText);
+          if (resp.success) {
+            alert('Upload Successful!');
+            fileInput.value = '';
+            titleInput.value = '';
+            fetchMediaList();
+          } else {
+            alert(resp.error || 'Upload error');
+          }
+        } catch (err) {
+          alert('Upload failed: ' + xhr.responseText);
+        }
+      };
+
+      xhr.send(formData);
+    }
+
+    async function fetchMediaList() {
+      try {
+        const res = await fetch('/api/v1/admin/media', { headers: getHeaders() });
+        const data = await res.json();
+        const grid = document.getElementById('mediaGrid');
+
+        if (!data.data || data.data.length === 0) {
+          grid.innerHTML = `<div class="col-span-full py-12 text-center text-slate-500 text-sm">No media uploaded yet. Use the upload box above!</div>`;
+          return;
+        }
+
+        grid.innerHTML = data.data.map(m => {
+          let icon = 'fa-film text-purple-400';
+          if (m.mediaType === 'audio') icon = 'fa-music text-emerald-400';
+          if (m.mediaType === 'image') icon = 'fa-image text-cyan-400';
+
+          const sizeMb = (m.fileSize / (1024 * 1024)).toFixed(1);
+
+          return `
+            <div class="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden shadow-lg group hover:border-slate-700 transition">
+              <div class="h-36 bg-slate-900 relative overflow-hidden flex items-center justify-center">
+                ${m.thumbnailUrl ? `<img src="${m.thumbnailUrl}" class="w-full h-full object-cover">` : `<i class="fa-solid ${icon} text-4xl opacity-40"></i>`}
+                <span class="absolute top-2 right-2 px-2 py-0.5 rounded bg-black/70 backdrop-blur text-[10px] font-bold uppercase tracking-wider text-slate-300">
+                  ${m.mediaType}
+                </span>
+              </div>
+              <div class="p-3">
+                <h4 class="font-bold text-sm truncate mb-1 text-slate-200">${m.title}</h4>
+                <div class="flex items-center justify-between text-[11px] text-slate-400">
+                  <span>${sizeMb} MB</span>
+                  <button onclick="deleteMediaItem('${m._id}')" class="text-rose-400 hover:text-rose-300 transition">
+                    <i class="fa-solid fa-trash-can"></i> Delete
+                  </button>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('');
+      } catch (e) { console.error(e); }
+    }
+
+    async function deleteMediaItem(id) {
+      if (!confirm('Are you sure you want to delete this media?')) return;
+      const res = await fetch(`/api/v1/admin/media/${id}`, {
+        method: 'DELETE',
+        headers: getHeaders()
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchMediaList();
+      } else {
+        alert(data.error || 'Failed to delete');
+      }
+    }
+
+    let qrCodeInstance = null;
+
+    let isTunnelRunning = false;
+
+    async function fetchTunnelStatus() {
+      try {
+        const res = await fetch('/api/v1/admin/tunnel', { headers: getHeaders() });
+        const data = await res.json();
+        if (data.success) {
+          const info = data.data;
+          const badge = document.getElementById('tunnelStatusBadge');
+          const btn = document.getElementById('toggleTunnelBtn');
+          const liveInfo = document.getElementById('liveTunnelInfo');
+
+          if (info.status === 'ONLINE') {
+            isTunnelRunning = true;
+            badge.className = 'text-[10px] px-2 py-0.5 rounded font-bold uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+            badge.innerText = 'ONLINE';
+            btn.className = 'flex-1 py-2 bg-rose-600/80 hover:bg-rose-600 text-white rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5';
+            btn.innerHTML = '<i class="fa-solid fa-stop"></i> Stop Online Tunnel';
+
+            liveInfo.classList.remove('hidden');
+            const urlLink = document.getElementById('liveTunnelUrl');
+            urlLink.href = info.tunnelUrl;
+            urlLink.innerText = info.tunnelUrl;
+            document.getElementById('liveTunnelPass').innerText = info.tunnelPassword || 'None';
+          } else {
+            isTunnelRunning = false;
+            badge.className = 'text-[10px] px-2 py-0.5 rounded font-bold uppercase bg-slate-800 text-slate-400 border border-slate-700';
+            badge.innerText = 'OFFLINE';
+            btn.className = 'flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5';
+            btn.innerHTML = '<i class="fa-solid fa-play"></i> Start Online Tunnel';
+            liveInfo.classList.add('hidden');
+          }
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    async function toggleOnlineTunnel() {
+      const btn = document.getElementById('toggleTunnelBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Switching...';
+
+      const action = isTunnelRunning ? 'stop' : 'start';
+      try {
+        const res = await fetch(`/api/v1/admin/tunnel/${action}`, {
+          method: 'POST',
+          headers: getHeaders()
+        });
+        const data = await res.json();
+        if (data.success) {
+          await fetchTunnelStatus();
+        } else {
+          alert(data.error || 'Failed to toggle tunnel');
+        }
+      } catch (e) {
+        alert('Network error switching tunnel');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function openNetworkModal() {
+      document.getElementById('networkModal').classList.remove('hidden');
+      await fetchNetworkDetails();
+      await fetchTunnelStatus();
+    }
+
+    function closeNetworkModal() {
+      document.getElementById('networkModal').classList.add('hidden');
+    }
+
+    async function fetchNetworkDetails() {
+      try {
+        const res = await fetch('/api/v1/admin/network', { headers: getHeaders() });
+        const data = await res.json();
+        if (data.success) {
+          const { directWifiUrl, mdnsUrl } = data.data;
+          document.getElementById('mdnsDisplay').innerText = mdnsUrl;
+          document.getElementById('directIpDisplay').innerText = directWifiUrl;
+          document.getElementById('networkIpText').innerText = directWifiUrl;
+
+          // Render QR Code
+          const qrBox = document.getElementById('qrcodeBox');
+          qrBox.innerHTML = '';
+          qrCodeInstance = new QRCode(qrBox, {
+            text: directWifiUrl,
+            width: 108,
+            height: 108,
+            colorDark: "#000000",
+            colorLight: "#ffffff",
+            correctLevel: QRCode.CorrectLevel.M
+          });
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    function copyToClipboard(elementId) {
+      const text = document.getElementById(elementId).innerText;
+      navigator.clipboard.writeText(text);
+      alert('Copied to clipboard: ' + text);
+    }
+
+    let quickQrInstance = null;
+    let currentGeneratedUrl = '';
+
+    async function handleGenerateFastLink() {
+      const select = document.getElementById('quickNetworkSelect');
+      const networkType = select.value;
+
+      try {
+        const res = await fetch('/api/v1/admin/quick-link', {
+          method: 'POST',
+          headers: { ...getHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ networkType })
+        });
+        const data = await res.json();
+        if (data.success) {
+          const { accessUrl } = data.data;
+          currentGeneratedUrl = accessUrl;
+
+          document.getElementById('quickLinkUrlText').innerText = accessUrl;
+          document.getElementById('quickLinkOpenBtn').href = accessUrl;
+          document.getElementById('quickLinkResultBox').classList.remove('hidden');
+
+          // Render QR code
+          const qrBox = document.getElementById('quickLinkQr');
+          qrBox.innerHTML = '';
+          quickQrInstance = new QRCode(qrBox, {
+            text: accessUrl,
+            width: 72,
+            height: 72,
+            colorDark: "#000000",
+            colorLight: "#ffffff",
+            correctLevel: QRCode.CorrectLevel.M
+          });
+        } else {
+          alert(data.error || 'Failed to generate link');
+        }
+      } catch (e) {
+        alert('Network error generating link');
+      }
+    }
+
+    function copyQuickLink() {
+      if (!currentGeneratedUrl) return;
+      navigator.clipboard.writeText(currentGeneratedUrl);
+      alert('Copied 1-Click Fast Stream Link to clipboard!');
+    }
+
+    checkAuth();
+  </script>
+</body>
+</html>
