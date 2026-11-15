@@ -20,7 +20,7 @@
       </div>
       <div>
         <h1 class="font-bold text-lg leading-tight">Admin Control Hub</h1>
-        <p class="text-xs text-slate-400">Wi-Fi Streamer: <span class="text-emerald-400 font-mono" id="networkIpText">http://192.168.0.105:9086</span></p>
+        <p class="text-xs text-slate-400">Wi-Fi Streamer: <span class="text-emerald-400 font-mono" id="networkIpText">http://192.168.0.105:9086</span> <span id="navLocalStatus" class="ml-1 text-[10px] font-bold text-emerald-400">(ONLINE)</span></p>
       </div>
     </div>
     <div class="flex items-center space-x-3">
@@ -381,22 +381,32 @@
           <p class="text-[10px] text-slate-500 mt-1">✨ This never changes even if you switch Wi-Fi networks!</p>
         </div>
 
-        <!-- Option 2: Current Numeric IP -->
-        <div class="bg-slate-950/70 border border-slate-800 p-3.5 rounded-xl">
-          <div class="flex items-center justify-between text-xs mb-1">
+        <!-- Option 2: Current Numeric IP & Local Network Switch -->
+        <div class="bg-slate-950/70 border border-slate-800 p-3.5 rounded-xl space-y-2.5">
+          <div class="flex items-center justify-between text-xs">
             <span class="text-slate-400 flex items-center gap-1.5 font-medium">
-              <i class="fa-solid fa-network-wired text-indigo-400"></i> Current Wi-Fi IP Address:
+              <i class="fa-solid fa-network-wired text-indigo-400"></i> Local Wi-Fi Connection:
             </span>
-            <button onclick="fetchNetworkDetails()" class="text-[10px] text-indigo-400 hover:underline">
-              <i class="fa-solid fa-rotate mr-1"></i> Refresh IP
-            </button>
+            <span id="localSharingStatusBadge" class="text-[10px] px-2 py-0.5 rounded font-bold uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+              CONNECTED
+            </span>
           </div>
-          <div class="flex items-center justify-between bg-slate-900 px-3 py-2 rounded-lg border border-slate-800 mt-1.5">
+
+          <div class="flex items-center justify-between bg-slate-900 px-3 py-2 rounded-lg border border-slate-800">
             <span id="directIpDisplay" class="font-mono text-xs text-emerald-400 truncate">Loading...</span>
-            <button onclick="copyToClipboard('directIpDisplay')" class="text-slate-400 hover:text-white text-xs ml-2">
-              <i class="fa-regular fa-copy"></i>
-            </button>
+            <div class="flex items-center gap-2">
+              <button onclick="fetchNetworkDetails()" title="Refresh IP" class="text-slate-400 hover:text-white text-xs">
+                <i class="fa-solid fa-rotate"></i>
+              </button>
+              <button onclick="copyToClipboard('directIpDisplay')" title="Copy IP" class="text-slate-400 hover:text-white text-xs">
+                <i class="fa-regular fa-copy"></i>
+              </button>
+            </div>
           </div>
+
+          <button id="toggleLocalSharingBtn" onclick="handleToggleLocalNetwork()" class="w-full py-2 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 font-semibold rounded-lg text-xs border border-rose-500/30 transition flex items-center justify-center gap-1.5">
+            <i class="fa-solid fa-power-off"></i> Disconnect from Local Network
+          </button>
         </div>
 
         <!-- Option 3: Online Cloudflare & Tunnel Controls -->
@@ -558,15 +568,77 @@
       document.getElementById('networkModal').classList.add('hidden');
     }
 
+    let currentLocalSharingState = true;
+
+    function updateLocalSharingUI(isEnabled) {
+      currentLocalSharingState = isEnabled;
+      const badge = document.getElementById('localSharingStatusBadge');
+      const btn = document.getElementById('toggleLocalSharingBtn');
+      const navStatus = document.getElementById('navLocalStatus');
+
+      if (isEnabled) {
+        if (badge) {
+          badge.className = 'text-[10px] px-2 py-0.5 rounded font-bold uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+          badge.innerText = 'CONNECTED';
+        }
+        if (btn) {
+          btn.className = 'w-full py-2 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 font-semibold rounded-lg text-xs border border-rose-500/30 transition flex items-center justify-center gap-1.5';
+          btn.innerHTML = '<i class="fa-solid fa-power-off"></i> Disconnect from Local Network';
+        }
+        if (navStatus) {
+          navStatus.className = 'ml-1 text-[10px] font-bold text-emerald-400';
+          navStatus.innerText = '(ONLINE)';
+        }
+      } else {
+        if (badge) {
+          badge.className = 'text-[10px] px-2 py-0.5 rounded font-bold uppercase bg-rose-500/20 text-rose-400 border border-rose-500/30';
+          badge.innerText = 'DISCONNECTED';
+        }
+        if (btn) {
+          btn.className = 'w-full py-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 font-semibold rounded-lg text-xs border border-emerald-500/30 transition flex items-center justify-center gap-1.5';
+          btn.innerHTML = '<i class="fa-solid fa-link"></i> Reconnect to Local Network';
+        }
+        if (navStatus) {
+          navStatus.className = 'ml-1 text-[10px] font-bold text-rose-400';
+          navStatus.innerText = '(DISCONNECTED)';
+        }
+      }
+    }
+
+    async function handleToggleLocalNetwork() {
+      const btn = document.getElementById('toggleLocalSharingBtn');
+      btn.disabled = true;
+      try {
+        const res = await fetch('/api/v1/admin/network/toggle', {
+          method: 'POST',
+          headers: { ...getHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled: !currentLocalSharingState })
+        });
+        const data = await res.json();
+        if (data.success) {
+          updateLocalSharingUI(data.localNetworkSharing);
+          alert(data.message);
+        } else {
+          alert(data.error || 'Failed to toggle local network');
+        }
+      } catch (e) {
+        alert('Network error toggling local network');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
     async function fetchNetworkDetails() {
       try {
         const res = await fetch('/api/v1/admin/network', { headers: getHeaders() });
         const data = await res.json();
         if (data.success) {
-          const { directWifiUrl, mdnsUrl } = data.data;
+          const { directWifiUrl, mdnsUrl, localNetworkSharing } = data.data;
           document.getElementById('mdnsDisplay').innerText = mdnsUrl;
           document.getElementById('directIpDisplay').innerText = directWifiUrl;
           document.getElementById('networkIpText').innerText = directWifiUrl;
+
+          updateLocalSharingUI(localNetworkSharing);
 
           // Render QR Code
           const qrBox = document.getElementById('qrcodeBox');
@@ -651,6 +723,7 @@
       await fetchPendingDevices();
       await fetchActiveDevicesCount();
       await fetchStorageOverview();
+      await fetchNetworkDetails();
       await fetchMediaList();
       setInterval(fetchPendingDevices, 5000);
     }
@@ -1030,15 +1103,77 @@
       document.getElementById('networkModal').classList.add('hidden');
     }
 
+    let currentLocalSharingState = true;
+
+    function updateLocalSharingUI(isEnabled) {
+      currentLocalSharingState = isEnabled;
+      const badge = document.getElementById('localSharingStatusBadge');
+      const btn = document.getElementById('toggleLocalSharingBtn');
+      const navStatus = document.getElementById('navLocalStatus');
+
+      if (isEnabled) {
+        if (badge) {
+          badge.className = 'text-[10px] px-2 py-0.5 rounded font-bold uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+          badge.innerText = 'CONNECTED';
+        }
+        if (btn) {
+          btn.className = 'w-full py-2 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 font-semibold rounded-lg text-xs border border-rose-500/30 transition flex items-center justify-center gap-1.5';
+          btn.innerHTML = '<i class="fa-solid fa-power-off"></i> Disconnect from Local Network';
+        }
+        if (navStatus) {
+          navStatus.className = 'ml-1 text-[10px] font-bold text-emerald-400';
+          navStatus.innerText = '(ONLINE)';
+        }
+      } else {
+        if (badge) {
+          badge.className = 'text-[10px] px-2 py-0.5 rounded font-bold uppercase bg-rose-500/20 text-rose-400 border border-rose-500/30';
+          badge.innerText = 'DISCONNECTED';
+        }
+        if (btn) {
+          btn.className = 'w-full py-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 font-semibold rounded-lg text-xs border border-emerald-500/30 transition flex items-center justify-center gap-1.5';
+          btn.innerHTML = '<i class="fa-solid fa-link"></i> Reconnect to Local Network';
+        }
+        if (navStatus) {
+          navStatus.className = 'ml-1 text-[10px] font-bold text-rose-400';
+          navStatus.innerText = '(DISCONNECTED)';
+        }
+      }
+    }
+
+    async function handleToggleLocalNetwork() {
+      const btn = document.getElementById('toggleLocalSharingBtn');
+      btn.disabled = true;
+      try {
+        const res = await fetch('/api/v1/admin/network/toggle', {
+          method: 'POST',
+          headers: { ...getHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled: !currentLocalSharingState })
+        });
+        const data = await res.json();
+        if (data.success) {
+          updateLocalSharingUI(data.localNetworkSharing);
+          alert(data.message);
+        } else {
+          alert(data.error || 'Failed to toggle local network');
+        }
+      } catch (e) {
+        alert('Network error toggling local network');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
     async function fetchNetworkDetails() {
       try {
         const res = await fetch('/api/v1/admin/network', { headers: getHeaders() });
         const data = await res.json();
         if (data.success) {
-          const { directWifiUrl, mdnsUrl } = data.data;
+          const { directWifiUrl, mdnsUrl, localNetworkSharing } = data.data;
           document.getElementById('mdnsDisplay').innerText = mdnsUrl;
           document.getElementById('directIpDisplay').innerText = directWifiUrl;
           document.getElementById('networkIpText').innerText = directWifiUrl;
+
+          updateLocalSharingUI(localNetworkSharing);
 
           // Render QR Code
           const qrBox = document.getElementById('qrcodeBox');

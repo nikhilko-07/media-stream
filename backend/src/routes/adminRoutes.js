@@ -4,6 +4,7 @@ import { requireAdmin } from '../middleware/adminAuth.js';
 import {
   verifyAdmin,
   getNetworkInfo,
+  toggleLocalNetwork,
   getTunnelStatus,
   startTunnel,
   stopTunnel,
@@ -49,6 +50,7 @@ export const createAdminRouter = (io) => {
   router.get('/verify', verifyAdmin);
   router.post('/verify', verifyAdmin);
   router.get('/network', getNetworkInfo);
+  router.post('/network/toggle', toggleLocalNetwork(io));
 
   // Online Tunnel Controls (Start/Stop from web UI)
   router.get('/tunnel', getTunnelStatus);

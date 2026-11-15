@@ -4,8 +4,58 @@ import jwt from 'jsonwebtoken';
 import { cloudinary } from '../config/cloudinary.js';
 import { Media } from '../models/Media.js';
 import { DeviceSession } from '../models/DeviceSession.js';
+import { AdminConfig } from '../models/AdminConfig.js';
 import { tunnelService } from '../services/tunnelService.js';
 import { googleDriveService } from '../services/googleDriveService.js';
+
+let localSharingCache = true;
+
+export const isLocalSharingActive = () => localSharingCache;
+
+export const initLocalSharingState = async () => {
+  try {
+    const config = await AdminConfig.findOne();
+    if (config && typeof config.localNetworkSharing === 'boolean') {
+      localSharingCache = config.localNetworkSharing;
+    }
+  } catch (e) {}
+};
+
+// Toggle Local Network Sharing (Disconnect / Reconnect)
+export const toggleLocalNetwork = (io) => async (req, res) => {
+  try {
+    const { enabled } = req.body || {};
+    const newState = typeof enabled === 'boolean' ? enabled : !localSharingCache;
+
+    localSharingCache = newState;
+
+    let config = await AdminConfig.findOne();
+    if (!config) {
+      config = await AdminConfig.create({ localNetworkSharing: newState });
+    } else {
+      config.localNetworkSharing = newState;
+      await config.save();
+    }
+
+    // Real-time broadcast to local clients
+    if (io) {
+      io.emit('LOCAL_NETWORK_STATE_CHANGED', {
+        connected: newState,
+        message: newState
+          ? 'Local Wi-Fi Network Connected.'
+          : 'Local Wi-Fi Network Disconnected by Administrator.'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: newState ? 'Local Wi-Fi Network Connected' : 'Local Wi-Fi Network Disconnected',
+      localNetworkSharing: newState
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
 
 // Storage Overview (Remaining Space in Cloudinary & Google Drive)
 export const getStorageOverview = async (req, res) => {
@@ -265,7 +315,8 @@ export const getNetworkInfo = (req, res) => {
         hostname,
         directWifiUrl: `http://${primaryIp}:${port}`,
         mdnsUrl: `http://${hostname}:${port}`,
-        activeInterfaces: activeIps
+        activeInterfaces: activeIps,
+        localNetworkSharing: localSharingCache
       }
     });
   } catch (error) {

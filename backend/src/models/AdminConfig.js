@@ -39,6 +39,11 @@ const adminConfigSchema = new mongoose.Schema(
     googleDriveFolderId: {
       type: String,
       default: ''
+    },
+    // Local Wi-Fi Network Access Toggle (Enabled by default, can be disconnected)
+    localNetworkSharing: {
+      type: Boolean,
+      default: true
     }
   },
   {
