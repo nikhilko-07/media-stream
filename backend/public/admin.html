@@ -39,21 +39,63 @@
     </div>
   </nav>
 
-  <!-- Login Modal (if not authenticated) -->
-  <div id="authGate" class="fixed inset-0 bg-slate-950/90 backdrop-blur z-50 flex items-center justify-center p-4">
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-6 text-center shadow-2xl">
-      <div class="w-14 h-14 rounded-full bg-indigo-500/10 text-indigo-400 flex items-center justify-center mx-auto mb-4 text-2xl border border-indigo-500/20">
-        <i class="fa-solid fa-shield-halved"></i>
+  <!-- Email OTP Login Modal (if not authenticated) -->
+  <div id="authGate" class="fixed inset-0 bg-slate-950/95 backdrop-blur z-50 flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-7 text-center shadow-2xl relative overflow-hidden">
+      <!-- Glow Accent -->
+      <div class="absolute -top-24 -left-24 w-48 h-48 bg-indigo-600/20 rounded-full blur-3xl pointer-events-none"></div>
+      <div class="absolute -bottom-24 -right-24 w-48 h-48 bg-purple-600/20 rounded-full blur-3xl pointer-events-none"></div>
+
+      <div class="w-16 h-16 rounded-2xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center mx-auto mb-4 text-3xl border border-indigo-500/20 shadow-inner">
+        <i class="fa-solid fa-envelope-circle-check"></i>
       </div>
-      <h2 class="text-xl font-bold mb-1">Admin Authentication</h2>
-      <p class="text-sm text-slate-400 mb-6">Enter your Admin Secret Key to manage devices and upload media.</p>
-      <form onsubmit="handleAdminLogin(event)" class="space-y-4">
-        <input type="password" id="adminKeyInput" placeholder="Enter Admin Secret Key" value="admin1234" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-center tracking-wider text-white focus:outline-none focus:border-indigo-500" required>
-        <button type="submit" class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-semibold transition shadow-lg shadow-indigo-600/30">
-          Unlock Dashboard
+      <h2 class="text-2xl font-bold mb-1">Admin Security Verification</h2>
+      <p class="text-xs text-slate-400 mb-6">Access requires a 6-digit one-time passcode sent to your verified email. Verified sessions remain active for <strong>24 hours</strong>.</p>
+
+      <!-- Step 1: Request OTP -->
+      <div id="otpRequestBox" class="space-y-4">
+        <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800/80 text-xs text-slate-300 flex items-center justify-between">
+          <span class="text-slate-400">Verified Email:</span>
+          <span id="authMaskedEmail" class="font-mono text-indigo-400 font-semibold">loading...</span>
+        </div>
+        <button id="sendOtpBtn" onclick="handleSendOtp()" class="w-full py-3.5 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-bold text-sm transition shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2">
+          <i class="fa-solid fa-paper-plane"></i> Send 6-Digit Login OTP
         </button>
-      </form>
-      <p id="authError" class="text-xs text-rose-400 mt-3 hidden"></p>
+      </div>
+
+      <!-- Step 2: Enter OTP -->
+      <div id="otpVerifyBox" class="hidden space-y-4">
+        <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 text-xs text-emerald-400 flex items-center justify-center gap-1.5 font-medium">
+          <i class="fa-solid fa-circle-check"></i> OTP sent to <span id="authSentEmail">your email</span>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1.5 text-left">Enter 6-Digit Passcode</label>
+          <input type="text" id="adminOtpInput" maxlength="6" placeholder="000000" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-center font-mono text-3xl tracking-[0.5em] text-white focus:outline-none focus:border-indigo-500 uppercase" required>
+        </div>
+        <button id="verifyOtpBtn" onclick="handleVerifyOtp()" class="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 rounded-xl font-bold text-sm transition shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2">
+          <i class="fa-solid fa-unlock"></i> Verify & Enter Dashboard
+        </button>
+        <div class="flex items-center justify-between text-xs text-slate-400 pt-1">
+          <span id="otpCountdownText" class="font-mono text-[11px] text-slate-500">Expires in 10:00</span>
+          <button onclick="handleSendOtp()" class="text-indigo-400 hover:underline text-[11px]">Resend Code</button>
+        </div>
+      </div>
+
+      <!-- Error text -->
+      <p id="authError" class="text-xs text-rose-400 mt-4 hidden bg-rose-500/10 p-2.5 rounded-lg border border-rose-500/20"></p>
+
+      <!-- Emergency Key Fallback Toggle -->
+      <div class="mt-6 pt-4 border-t border-slate-800/80 text-center">
+        <button onclick="toggleMasterKeyBox()" class="text-[11px] text-slate-500 hover:text-slate-400">
+          Or login with Master Key
+        </button>
+        <div id="masterKeyFallbackBox" class="hidden mt-3 space-y-2">
+          <input type="password" id="adminKeyFallbackInput" placeholder="Master Key (e.g. admin1234)" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-center text-white focus:outline-none focus:border-indigo-500">
+          <button onclick="handleMasterKeyLogin()" class="w-full py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-semibold text-slate-300">
+            Submit Master Key
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -452,20 +494,42 @@
   <script src="/socket.io/socket.io.js"></script>
   <script>
     const socket = io();
-    let currentAdminKey = localStorage.getItem('STREAM_ADMIN_KEY') || 'admin1234';
 
     function getHeaders() {
-      return {
-        'x-admin-key': currentAdminKey
-      };
+      const token = localStorage.getItem('STREAM_ADMIN_TOKEN');
+      const headers = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const masterKey = localStorage.getItem('STREAM_ADMIN_KEY');
+      if (masterKey) headers['x-admin-key'] = masterKey;
+      return headers;
+    }
+
+    let otpCountdownTimer = null;
+
+    async function loadAuthInfo() {
+      try {
+        const res = await fetch('/api/v1/admin/auth/info');
+        const data = await res.json();
+        if (data.success && data.data) {
+          const emailElem = document.getElementById('authMaskedEmail');
+          if (emailElem) emailElem.innerText = data.data.maskedEmail || 'Configured in .env';
+        }
+      } catch (err) {
+        console.error('Failed to load auth info:', err);
+      }
     }
 
     async function checkAuth() {
       const errorElem = document.getElementById('authError');
-      if (!currentAdminKey) {
+      const token = localStorage.getItem('STREAM_ADMIN_TOKEN');
+      const masterKey = localStorage.getItem('STREAM_ADMIN_KEY');
+
+      if (!token && !masterKey) {
         document.getElementById('authGate').classList.remove('hidden');
+        loadAuthInfo();
         return;
       }
+
       try {
         const res = await fetch('/api/v1/admin/verify', {
           method: 'POST',
@@ -477,28 +541,178 @@
           document.getElementById('authGate').classList.add('hidden');
           initDashboard();
         } else {
+          localStorage.removeItem('STREAM_ADMIN_TOKEN');
           document.getElementById('authGate').classList.remove('hidden');
           if (errorElem) {
-            errorElem.innerText = data.error || 'Incorrect Admin Key';
+            errorElem.innerText = data.error || 'Session expired. Please request a new OTP.';
             errorElem.classList.remove('hidden');
           }
+          loadAuthInfo();
         }
       } catch (e) {
         document.getElementById('authGate').classList.remove('hidden');
         if (errorElem) {
-          errorElem.innerText = 'Network error verifying key';
+          errorElem.innerText = 'Network error verifying authentication';
+          errorElem.classList.remove('hidden');
+        }
+        loadAuthInfo();
+      }
+    }
+
+    async function handleSendOtp() {
+      const btn = document.getElementById('sendOtpBtn');
+      const errorElem = document.getElementById('authError');
+      if (errorElem) errorElem.classList.add('hidden');
+
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Sending OTP...';
+
+      try {
+        const res = await fetch('/api/v1/admin/auth/send-otp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        const data = await res.json();
+        if (data.success) {
+          document.getElementById('otpRequestBox').classList.add('hidden');
+          document.getElementById('otpVerifyBox').classList.remove('hidden');
+          const sentEmailElem = document.getElementById('authSentEmail');
+          if (sentEmailElem) sentEmailElem.innerText = data.maskedEmail || 'your email';
+
+          startOtpCountdown(600);
+          const otpInput = document.getElementById('adminOtpInput');
+          if (otpInput) {
+            otpInput.value = '';
+            otpInput.focus();
+          }
+        } else {
+          if (errorElem) {
+            errorElem.innerText = data.error || 'Failed to send OTP';
+            errorElem.classList.remove('hidden');
+          }
+        }
+      } catch (e) {
+        if (errorElem) {
+          errorElem.innerText = 'Failed to connect to OTP service: ' + e.message;
+          errorElem.classList.remove('hidden');
+        }
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-paper-plane mr-1"></i> Send 6-Digit Login OTP';
+      }
+    }
+
+    function startOtpCountdown(seconds) {
+      if (otpCountdownTimer) clearInterval(otpCountdownTimer);
+      let remaining = seconds;
+      const countdownElem = document.getElementById('otpCountdownText');
+
+      function update() {
+        const mins = Math.floor(remaining / 60);
+        const secs = remaining % 60;
+        if (countdownElem) {
+          countdownElem.innerText = `Expires in ${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+        }
+        if (remaining <= 0) {
+          clearInterval(otpCountdownTimer);
+          if (countdownElem) countdownElem.innerText = 'OTP expired. Please resend.';
+        }
+        remaining--;
+      }
+
+      update();
+      otpCountdownTimer = setInterval(update, 1000);
+    }
+
+    async function handleVerifyOtp() {
+      const input = document.getElementById('adminOtpInput');
+      const otp = input ? input.value.trim() : '';
+      const errorElem = document.getElementById('authError');
+      const btn = document.getElementById('verifyOtpBtn');
+
+      if (!otp || otp.length < 6) {
+        if (errorElem) {
+          errorElem.innerText = 'Please enter the 6-digit code sent to your email';
+          errorElem.classList.remove('hidden');
+        }
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Verifying...';
+      if (errorElem) errorElem.classList.add('hidden');
+
+      try {
+        const res = await fetch('/api/v1/admin/auth/verify-otp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ otp })
+        });
+        const data = await res.json();
+        if (data.success && data.token) {
+          localStorage.setItem('STREAM_ADMIN_TOKEN', data.token);
+          document.getElementById('authGate').classList.add('hidden');
+          if (otpCountdownTimer) clearInterval(otpCountdownTimer);
+          initDashboard();
+        } else {
+          if (errorElem) {
+            errorElem.innerText = data.error || 'Invalid or expired OTP code';
+            errorElem.classList.remove('hidden');
+          }
+        }
+      } catch (e) {
+        if (errorElem) {
+          errorElem.innerText = 'Verification failed: ' + e.message;
+          errorElem.classList.remove('hidden');
+        }
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-unlock mr-1"></i> Verify & Enter Dashboard';
+      }
+    }
+
+    function toggleMasterKeyBox() {
+      const box = document.getElementById('masterKeyFallbackBox');
+      if (box) box.classList.toggle('hidden');
+    }
+
+    async function handleMasterKeyLogin() {
+      const key = document.getElementById('adminKeyFallbackInput').value.trim();
+      const errorElem = document.getElementById('authError');
+      if (!key) return;
+
+      try {
+        const res = await fetch('/api/v1/admin/verify', {
+          method: 'POST',
+          headers: { 'x-admin-key': key }
+        });
+        const data = await res.json();
+        if (data.success) {
+          localStorage.setItem('STREAM_ADMIN_KEY', key);
+          document.getElementById('authGate').classList.add('hidden');
+          if (errorElem) errorElem.classList.add('hidden');
+          initDashboard();
+        } else {
+          if (errorElem) {
+            errorElem.innerText = data.error || 'Invalid Master Key';
+            errorElem.classList.remove('hidden');
+          }
+        }
+      } catch (e) {
+        if (errorElem) {
+          errorElem.innerText = 'Master key verification failed';
           errorElem.classList.remove('hidden');
         }
       }
     }
 
-    function handleAdminLogin(e) {
-      e.preventDefault();
-      const key = document.getElementById('adminKeyInput').value.trim();
-      currentAdminKey = key;
-      localStorage.setItem('STREAM_ADMIN_KEY', key);
-      let qrCodeInstance = null;
+    function logoutAdmin() {
+      localStorage.removeItem('STREAM_ADMIN_TOKEN');
+      localStorage.removeItem('STREAM_ADMIN_KEY');
+      location.reload();
+    }
 
+    let qrCodeInstance = null;
     let isTunnelRunning = false;
 
     async function fetchTunnelStatus() {
@@ -659,127 +873,6 @@
       } finally {
         btn.disabled = false;
       }
-    }
-
-    async function handleShutdownServer() {
-      if (!confirm('⚠️ Are you sure you want to completely STOP the webserver?\n\nPort 9086 will close, the connection will break, and the server process will exit.\n\nTo start it again, run "npm start" in terminal.')) {
-        return;
-      }
-
-      try {
-        const res = await fetch('/api/v1/admin/server/shutdown', {
-          method: 'POST',
-          headers: getHeaders()
-        });
-        const data = await res.json();
-        alert('🛑 ' + data.message);
-        document.body.innerHTML = `
-          <div class="min-h-screen bg-slate-950 text-white flex items-center justify-center p-6 text-center font-sans">
-            <div class="max-w-md bg-slate-900 border border-slate-800 p-8 rounded-3xl space-y-4 shadow-2xl">
-              <div class="w-16 h-16 bg-rose-500/10 text-rose-400 rounded-2xl flex items-center justify-center mx-auto text-3xl border border-rose-500/20">
-                🔌
-              </div>
-              <h2 class="text-2xl font-bold">Webserver Stopped</h2>
-              <p class="text-xs text-slate-400 leading-relaxed">The server process has terminated and port 9086 is closed and released.</p>
-              <div class="text-[11px] text-slate-500 font-mono">PORT 9086: UNBOUND / OFFLINE</div>
-            </div>
-          </div>
-        `;
-      } catch (e) {
-        alert('Server terminated and connection closed.');
-        location.reload();
-      }
-    }
-
-    async function fetchNetworkDetails() {
-      try {
-        const res = await fetch('/api/v1/admin/network', { headers: getHeaders() });
-        const data = await res.json();
-        if (data.success) {
-          const { directWifiUrl, mdnsUrl, localNetworkSharing } = data.data;
-          document.getElementById('mdnsDisplay').innerText = mdnsUrl;
-          document.getElementById('directIpDisplay').innerText = directWifiUrl;
-          document.getElementById('networkIpText').innerText = directWifiUrl;
-
-          updateLocalSharingUI(localNetworkSharing);
-
-          // Render QR Code
-          const qrBox = document.getElementById('qrcodeBox');
-          qrBox.innerHTML = '';
-          qrCodeInstance = new QRCode(qrBox, {
-            text: directWifiUrl,
-            width: 108,
-            height: 108,
-            colorDark: "#000000",
-            colorLight: "#ffffff",
-            correctLevel: QRCode.CorrectLevel.M
-          });
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    }
-
-    function copyToClipboard(elementId) {
-      const text = document.getElementById(elementId).innerText;
-      navigator.clipboard.writeText(text);
-      alert('Copied to clipboard: ' + text);
-    }
-
-    let quickQrInstance = null;
-    let currentGeneratedUrl = '';
-
-    async function handleGenerateFastLink() {
-      const select = document.getElementById('quickNetworkSelect');
-      const networkType = select.value;
-
-      try {
-        const res = await fetch('/api/v1/admin/quick-link', {
-          method: 'POST',
-          headers: { ...getHeaders(), 'Content-Type': 'application/json' },
-          body: JSON.stringify({ networkType })
-        });
-        const data = await res.json();
-        if (data.success) {
-          const { accessUrl } = data.data;
-          currentGeneratedUrl = accessUrl;
-
-          document.getElementById('quickLinkUrlText').innerText = accessUrl;
-          document.getElementById('quickLinkOpenBtn').href = accessUrl;
-          document.getElementById('quickLinkResultBox').classList.remove('hidden');
-
-          // Render QR code
-          const qrBox = document.getElementById('quickLinkQr');
-          qrBox.innerHTML = '';
-          quickQrInstance = new QRCode(qrBox, {
-            text: accessUrl,
-            width: 72,
-            height: 72,
-            colorDark: "#000000",
-            colorLight: "#ffffff",
-            correctLevel: QRCode.CorrectLevel.M
-          });
-        } else {
-          alert(data.error || 'Failed to generate link');
-        }
-      } catch (e) {
-        alert('Network error generating link');
-      }
-    }
-
-    function copyQuickLink() {
-      if (!currentGeneratedUrl) return;
-      navigator.clipboard.writeText(currentGeneratedUrl);
-      alert('Copied 1-Click Fast Stream Link to clipboard!');
-    }
-
-    checkAuth();
-    }
-
-    function logoutAdmin() {
-      localStorage.removeItem('STREAM_ADMIN_KEY');
-      currentAdminKey = '';
-      document.getElementById('authGate').classList.remove('hidden');
     }
 
     async function initDashboard() {

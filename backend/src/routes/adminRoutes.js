@@ -24,6 +24,12 @@ import {
   disconnectGoogleDrive
 } from '../controllers/adminController.js';
 
+import {
+  getAdminAuthInfo,
+  sendAdminLoginOtp,
+  verifyAdminLoginOtp
+} from '../controllers/adminAuthController.js';
+
 const storage = multer.memoryStorage();
 const upload = multer({
   storage,
@@ -33,10 +39,15 @@ const upload = multer({
 export const createAdminRouter = (io, server) => {
   const router = express.Router();
 
+  // Public OTP Login Endpoints
+  router.get('/auth/info', getAdminAuthInfo);
+  router.post('/auth/send-otp', sendAdminLoginOtp);
+  router.post('/auth/verify-otp', verifyAdminLoginOtp);
+
   // Public callback from Google OAuth redirect (doesn't have x-admin-key header)
   router.get('/google/callback', handleGoogleCallback);
 
-  // All routes below require Admin Key
+  // All routes below require Admin Key / 24h JWT Token
   router.use(requireAdmin);
 
   // Complete Server Shutdown & Port Release
