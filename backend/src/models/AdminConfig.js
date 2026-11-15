@@ -2,21 +2,43 @@ import mongoose from 'mongoose';
 
 const adminConfigSchema = new mongoose.Schema(
   {
-    adminKeyHash: {
-      type: String,
-      required: true // Hashed master PIN/Passcode for /admin
-    },
-    allowedLocalSubnet: {
-      type: String,
-      default: '192.168.' // Optional: restrict admin to home Wi-Fi subnet
-    },
     serverName: {
       type: String,
       default: 'Personal Home Media Hub'
     },
+    // Active Storage Provider: 'cloudinary' or 'google_drive'
+    activeStorageProvider: {
+      type: String,
+      enum: ['cloudinary', 'google_drive'],
+      default: 'cloudinary'
+    },
+    // Google Drive Integration Details
+    googleDriveConnected: {
+      type: Boolean,
+      default: false
+    },
+    googleClientId: {
+      type: String,
+      default: ''
+    },
+    googleClientSecret: {
+      type: String,
+      default: ''
+    },
+    googleTokens: {
+      access_token: String,
+      refresh_token: String,
+      scope: String,
+      token_type: String,
+      expiry_date: Number
+    },
+    googleUserEmail: {
+      type: String,
+      default: ''
+    },
     googleDriveFolderId: {
       type: String,
-      required: true // Target folder in Google Drive
+      default: ''
     }
   },
   {

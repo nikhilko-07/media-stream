@@ -14,7 +14,13 @@ import {
   revokeDevice,
   uploadMedia,
   listAllMedia,
-  deleteMedia
+  deleteMedia,
+  getStorageOverview,
+  setActiveStorageProvider,
+  saveGoogleCredentials,
+  getGoogleAuthUrl,
+  handleGoogleCallback,
+  disconnectGoogleDrive
 } from '../controllers/adminController.js';
 
 const storage = multer.memoryStorage();
@@ -26,8 +32,18 @@ const upload = multer({
 export const createAdminRouter = (io) => {
   const router = express.Router();
 
+  // Public callback from Google OAuth redirect (doesn't have x-admin-key header)
+  router.get('/google/callback', handleGoogleCallback);
+
   // All routes below require Admin Key
   router.use(requireAdmin);
+
+  // Storage Overview & Provider Switcher
+  router.get('/storage/status', getStorageOverview);
+  router.post('/storage/provider', setActiveStorageProvider);
+  router.post('/google/credentials', saveGoogleCredentials);
+  router.get('/google/auth-url', getGoogleAuthUrl);
+  router.post('/google/disconnect', disconnectGoogleDrive);
 
   // Admin Verification (Accept both GET and POST)
   router.get('/verify', verifyAdmin);

@@ -56,6 +56,91 @@
 
   <!-- Dashboard Container -->
   <main class="max-w-7xl mx-auto px-6 py-8 space-y-8">
+    <!-- Section: Storage Quota & Cloud Provider Switcher -->
+    <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+        <div>
+          <span class="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/10 text-sky-400 border border-sky-500/20 mb-1">
+            <i class="fa-solid fa-server mr-1"></i> Multi-Cloud Storage Hub
+          </span>
+          <h2 class="font-bold text-lg text-white">Storage Capacity & Cloud Providers</h2>
+          <p class="text-xs text-slate-400">Monitor remaining space and choose where new uploads are stored</p>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <span class="text-xs text-slate-400 font-medium">Store Uploads In:</span>
+          <div class="inline-flex rounded-xl p-1 bg-slate-950 border border-slate-800">
+            <button id="providerBtnCloudinary" onclick="switchStorageProvider('cloudinary')" class="px-3 py-1.5 rounded-lg text-xs font-semibold transition bg-indigo-600 text-white shadow">
+              <i class="fa-solid fa-cloud mr-1 text-sky-300"></i> Cloudinary
+            </button>
+            <button id="providerBtnGdrive" onclick="switchStorageProvider('google_drive')" class="px-3 py-1.5 rounded-lg text-xs font-semibold transition text-slate-400 hover:text-white">
+              <i class="fa-brands fa-google-drive mr-1 text-amber-400"></i> Google Drive
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Storage Cards (Cloudinary vs Google Drive) -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Card 1: Cloudinary Storage -->
+        <div class="bg-slate-950/70 border border-slate-800/80 rounded-xl p-4 space-y-3 relative overflow-hidden">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-2.5">
+              <div class="w-8 h-8 rounded-lg bg-sky-500/10 text-sky-400 flex items-center justify-center text-sm border border-sky-500/20">
+                <i class="fa-solid fa-cloud"></i>
+              </div>
+              <div>
+                <h4 class="text-sm font-bold text-white flex items-center gap-1.5">
+                  Cloudinary Storage
+                  <span id="cloudinaryActiveBadge" class="text-[9px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.2 rounded border border-emerald-500/30">ACTIVE</span>
+                </h4>
+                <p class="text-[11px] text-slate-400">Plan: <span id="cloudinaryPlan">Free Tier</span></p>
+              </div>
+            </div>
+            <div class="text-right">
+              <div class="text-xs font-bold text-emerald-400 font-mono" id="cloudinaryRemaining">-- GB Free</div>
+              <div class="text-[10px] text-slate-500" id="cloudinaryUsed">-- MB used of -- GB</div>
+            </div>
+          </div>
+          <div class="w-full bg-slate-900 h-2 rounded-full overflow-hidden border border-slate-800">
+            <div id="cloudinaryProgressBar" class="bg-sky-500 h-full w-0 transition-all duration-500"></div>
+          </div>
+        </div>
+
+        <!-- Card 2: Google Drive Storage -->
+        <div class="bg-slate-950/70 border border-slate-800/80 rounded-xl p-4 space-y-3 relative overflow-hidden">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-2.5">
+              <div class="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-400 flex items-center justify-center text-sm border border-amber-500/20">
+                <i class="fa-brands fa-google-drive"></i>
+              </div>
+              <div>
+                <h4 class="text-sm font-bold text-white flex items-center gap-1.5">
+                  Google Drive
+                  <span id="gdriveActiveBadge" class="hidden text-[9px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.2 rounded border border-emerald-500/30">ACTIVE</span>
+                </h4>
+                <p class="text-[11px] text-slate-400" id="gdriveStatusSubtitle">Not Connected</p>
+              </div>
+            </div>
+            <div class="text-right" id="gdriveQuotaStats">
+              <button onclick="openGoogleDriveModal()" class="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-xs transition shadow flex items-center gap-1.5">
+                <i class="fa-brands fa-google"></i> Connect Drive
+              </button>
+            </div>
+          </div>
+          <div id="gdriveProgressWrapper" class="hidden space-y-1">
+            <div class="flex justify-between text-[10px] text-slate-400">
+              <span id="gdriveUsed">0 GB used</span>
+              <span class="font-mono text-emerald-400 font-bold" id="gdriveRemaining">15 GB Free</span>
+            </div>
+            <div class="w-full bg-slate-900 h-2 rounded-full overflow-hidden border border-slate-800">
+              <div id="gdriveProgressBar" class="bg-amber-500 h-full w-0 transition-all duration-500"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Grid: Device Admissions & Quick Upload -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
       
@@ -195,6 +280,57 @@
       </div>
     </div>
   </main>
+
+  <!-- Google Drive Connection Modal -->
+  <div id="googleDriveModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-6 space-y-5 shadow-2xl relative">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center text-xl border border-amber-500/20">
+            <i class="fa-brands fa-google-drive"></i>
+          </div>
+          <div>
+            <h3 class="font-bold text-base">Connect Google Drive</h3>
+            <p class="text-xs text-slate-400">Store large media files directly in your Google Drive (15 GB+)</p>
+          </div>
+        </div>
+        <button onclick="closeGoogleDriveModal()" class="w-8 h-8 rounded-full bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center transition">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="space-y-2.5 text-xs text-slate-300 bg-slate-950 p-4 rounded-xl border border-slate-800">
+        <h4 class="font-bold text-amber-400 flex items-center gap-1.5"><i class="fa-solid fa-circle-info"></i> How to Setup in Google Cloud Console:</h4>
+        <ol class="list-decimal list-inside space-y-1 text-slate-400 text-[11px]">
+          <li>Visit <a href="https://console.cloud.google.com/" target="_blank" class="text-indigo-400 underline">Google Cloud Console</a> & create or select a project.</li>
+          <li>Go to <strong>APIs & Services $\rightarrow$ Library</strong> and enable <strong>Google Drive API</strong>.</li>
+          <li>Go to <strong>APIs & Services $\rightarrow$ Credentials</strong> $\rightarrow$ <strong>Create Credentials $\rightarrow$ OAuth Client ID</strong> (Web application).</li>
+          <li>Set <strong>Authorized redirect URIs</strong> to: <br><code id="gdriveRedirectDisplay" class="text-amber-300 font-mono text-[10px] break-all bg-slate-900 p-1 rounded inline-block mt-0.5">...</code></li>
+        </ol>
+      </div>
+
+      <form onsubmit="handleSaveGoogleCredentials(event)" class="space-y-3">
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Google Client ID</label>
+          <input type="text" id="gdriveClientIdInput" placeholder="xxxx.apps.googleusercontent.com" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500" required>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Google Client Secret</label>
+          <input type="password" id="gdriveClientSecretInput" placeholder="GOCSPX-xxxxxxxxxxxx" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500" required>
+        </div>
+
+        <button type="submit" class="w-full py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs transition shadow-lg shadow-amber-500/20">
+          Save & Authorize Account
+        </button>
+      </form>
+
+      <div id="gdriveDisconnectBox" class="hidden pt-2 border-t border-slate-800">
+        <button onclick="handleDisconnectGoogleDrive()" class="w-full py-2 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 text-xs font-semibold rounded-xl border border-rose-500/30 transition">
+          Disconnect Google Drive Account
+        </button>
+      </div>
+    </div>
+  </div>
 
   <!-- Wi-Fi & Network Settings Modal -->
   <div id="networkModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur z-50 hidden flex items-center justify-center p-4">
@@ -514,8 +650,139 @@
     async function initDashboard() {
       await fetchPendingDevices();
       await fetchActiveDevicesCount();
+      await fetchStorageOverview();
       await fetchMediaList();
       setInterval(fetchPendingDevices, 5000);
+    }
+
+    async function fetchStorageOverview() {
+      try {
+        const res = await fetch('/api/v1/admin/storage/status', { headers: getHeaders() });
+        const data = await res.json();
+        if (data.success) {
+          const { activeStorageProvider, cloudinary, googleDrive } = data.data;
+
+          // Update Cloudinary UI
+          document.getElementById('cloudinaryPlan').innerText = `${cloudinary.plan} Plan`;
+          document.getElementById('cloudinaryUsed').innerText = `${cloudinary.formattedUsed} used of ${cloudinary.formattedLimit}`;
+          document.getElementById('cloudinaryRemaining').innerText = `${cloudinary.formattedRemaining} Free`;
+          document.getElementById('cloudinaryProgressBar').style.width = `${Math.min(100, cloudinary.usedPercent)}%`;
+
+          // Update Google Drive UI
+          const gdriveSubtitle = document.getElementById('gdriveStatusSubtitle');
+          const gdriveStats = document.getElementById('gdriveQuotaStats');
+          const gdriveProgress = document.getElementById('gdriveProgressWrapper');
+          const disconnectBox = document.getElementById('gdriveDisconnectBox');
+
+          if (googleDrive && googleDrive.connected) {
+            gdriveSubtitle.innerText = googleDrive.userEmail || 'Connected';
+            gdriveStats.innerHTML = `<button onclick="openGoogleDriveModal()" class="text-xs text-slate-400 hover:text-white underline">Manage</button>`;
+            gdriveProgress.classList.remove('hidden');
+            document.getElementById('gdriveUsed').innerText = `${googleDrive.formattedUsed} used of ${googleDrive.formattedTotal}`;
+            document.getElementById('gdriveRemaining').innerText = `${googleDrive.formattedRemaining} Free`;
+            document.getElementById('gdriveProgressBar').style.width = `${Math.min(100, googleDrive.usedPercent)}%`;
+            disconnectBox.classList.remove('hidden');
+          } else {
+            gdriveSubtitle.innerText = 'Not Connected';
+            gdriveStats.innerHTML = `<button onclick="openGoogleDriveModal()" class="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-xs transition shadow flex items-center gap-1.5"><i class="fa-brands fa-google"></i> Connect Drive</button>`;
+            gdriveProgress.classList.add('hidden');
+            disconnectBox.classList.add('hidden');
+          }
+
+          // Active provider badge & buttons
+          applyActiveProviderUI(activeStorageProvider);
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    function applyActiveProviderUI(provider) {
+      const btnCloudinary = document.getElementById('providerBtnCloudinary');
+      const btnGdrive = document.getElementById('providerBtnGdrive');
+      const badgeCloudinary = document.getElementById('cloudinaryActiveBadge');
+      const badgeGdrive = document.getElementById('gdriveActiveBadge');
+
+      if (provider === 'google_drive') {
+        btnGdrive.className = 'px-3 py-1.5 rounded-lg text-xs font-semibold transition bg-amber-500 text-slate-950 shadow font-bold';
+        btnCloudinary.className = 'px-3 py-1.5 rounded-lg text-xs font-semibold transition text-slate-400 hover:text-white';
+        badgeGdrive.classList.remove('hidden');
+        badgeCloudinary.classList.add('hidden');
+      } else {
+        btnCloudinary.className = 'px-3 py-1.5 rounded-lg text-xs font-semibold transition bg-indigo-600 text-white shadow font-bold';
+        btnGdrive.className = 'px-3 py-1.5 rounded-lg text-xs font-semibold transition text-slate-400 hover:text-white';
+        badgeCloudinary.classList.remove('hidden');
+        badgeGdrive.classList.add('hidden');
+      }
+    }
+
+    async function switchStorageProvider(provider) {
+      try {
+        const res = await fetch('/api/v1/admin/storage/provider', {
+          method: 'POST',
+          headers: { ...getHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ provider })
+        });
+        const data = await res.json();
+        if (data.success) {
+          applyActiveProviderUI(provider);
+          alert(`New uploads will now be stored in: ${provider === 'google_drive' ? 'Google Drive' : 'Cloudinary'}`);
+        } else {
+          alert(data.error || 'Failed to switch provider');
+        }
+      } catch (e) {
+        alert('Network error switching provider');
+      }
+    }
+
+    function openGoogleDriveModal() {
+      const origin = window.location.origin;
+      const redirectUri = `${origin}/api/v1/admin/google/callback`;
+      document.getElementById('gdriveRedirectDisplay').innerText = redirectUri;
+      document.getElementById('googleDriveModal').classList.remove('hidden');
+    }
+
+    function closeGoogleDriveModal() {
+      document.getElementById('googleDriveModal').classList.add('hidden');
+    }
+
+    async function handleSaveGoogleCredentials(e) {
+      e.preventDefault();
+      const clientId = document.getElementById('gdriveClientIdInput').value.trim();
+      const clientSecret = document.getElementById('gdriveClientSecretInput').value.trim();
+
+      const saveRes = await fetch('/api/v1/admin/google/credentials', {
+        method: 'POST',
+        headers: { ...getHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId, clientSecret })
+      });
+      const saveData = await saveRes.json();
+      if (!saveData.success) {
+        alert(saveData.error || 'Failed to save credentials');
+        return;
+      }
+
+      // Fetch Auth URL
+      const authRes = await fetch('/api/v1/admin/google/auth-url', { headers: getHeaders() });
+      const authData = await authRes.json();
+      if (authData.success && authData.url) {
+        window.location.href = authData.url; // Redirect to Google OAuth consent
+      } else {
+        alert(authData.error || 'Could not generate Google login URL');
+      }
+    }
+
+    async function handleDisconnectGoogleDrive() {
+      if (!confirm('Disconnect your Google Drive account?')) return;
+      const res = await fetch('/api/v1/admin/google/disconnect', {
+        method: 'POST',
+        headers: getHeaders()
+      });
+      const data = await res.json();
+      if (data.success) {
+        closeGoogleDriveModal();
+        fetchStorageOverview();
+      }
     }
 
     async function fetchPendingDevices() {
@@ -653,6 +920,9 @@
             <div class="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden shadow-lg group hover:border-slate-700 transition">
               <div class="h-36 bg-slate-900 relative overflow-hidden flex items-center justify-center">
                 ${m.thumbnailUrl ? `<img src="${m.thumbnailUrl}" class="w-full h-full object-cover">` : `<i class="fa-solid ${icon} text-4xl opacity-40"></i>`}
+                <span class="absolute top-2 left-2 px-2 py-0.5 rounded ${m.storageProvider === 'google_drive' ? 'bg-amber-500/90 text-slate-950 font-bold' : 'bg-sky-500/90 text-white font-bold'} backdrop-blur text-[9px] uppercase tracking-wider">
+                  ${m.storageProvider === 'google_drive' ? '<i class="fa-brands fa-google-drive mr-0.5"></i> Drive' : '<i class="fa-solid fa-cloud mr-0.5"></i> Cloudinary'}
+                </span>
                 <span class="absolute top-2 right-2 px-2 py-0.5 rounded bg-black/70 backdrop-blur text-[10px] font-bold uppercase tracking-wider text-slate-300">
                   ${m.mediaType}
                 </span>

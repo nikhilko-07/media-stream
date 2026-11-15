@@ -1,6 +1,7 @@
 import http from 'http';
 import https from 'https';
 import { Media } from '../models/Media.js';
+import { googleDriveService } from '../services/googleDriveService.js';
 
 // Get library for authorized clients
 export const getMediaCatalog = async (req, res) => {
@@ -44,7 +45,27 @@ export const streamMedia = async (req, res) => {
 
     // Images don't need range streaming; redirect or pipe
     if (media.mediaType === 'image') {
+      if (media.storageProvider === 'google_drive') {
+        const driveRes = await googleDriveService.streamFile(media.googleDriveFileId);
+        res.writeHead(200, { 'Content-Type': media.mimeType, 'Cache-Control': 'public, max-age=86400' });
+        return driveRes.data.pipe(res);
+      }
       return res.redirect(media.secureUrl);
+    }
+
+    // If stored on Google Drive (Stream chunks with Range headers)
+    if (media.storageProvider === 'google_drive') {
+      const range = req.headers.range;
+      const driveRes = await googleDriveService.streamFile(media.googleDriveFileId, range);
+
+      res.writeHead(driveRes.status || (range ? 206 : 200), {
+        ...driveRes.headers,
+        'Content-Type': media.mimeType,
+        'Accept-Ranges': 'bytes',
+        'Cache-Control': 'no-store, private'
+      });
+
+      return driveRes.data.pipe(res);
     }
 
     // Determine target URL and Content-Type (MKV converted to MP4 container on-the-fly by Cloudinary for universal browser playback)

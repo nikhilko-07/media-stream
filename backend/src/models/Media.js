@@ -18,20 +18,28 @@ const mediaSchema = new mongoose.Schema(
     },
     mimeType: {
       type: String,
-      required: true // e.g. 'video/mp4', 'audio/mpeg', 'image/jpeg'
+      required: true // e.g. 'video/mp4', 'audio/mpeg', 'image/jpeg', 'video/x-matroska'
     },
     fileSize: {
       type: Number,
       required: true // Size in bytes
     },
-    // Cloudinary Storage details
-    cloudinaryPublicId: {
+    // Storage Provider Selector
+    storageProvider: {
       type: String,
-      required: true
+      enum: ['cloudinary', 'google_drive'],
+      default: 'cloudinary'
+    },
+    // Cloudinary details (if stored on Cloudinary)
+    cloudinaryPublicId: {
+      type: String
     },
     secureUrl: {
-      type: String,
-      required: true
+      type: String
+    },
+    // Google Drive details (if stored on Google Drive)
+    googleDriveFileId: {
+      type: String
     },
     thumbnailUrl: {
       type: String,

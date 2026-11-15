@@ -5,6 +5,149 @@ import { cloudinary } from '../config/cloudinary.js';
 import { Media } from '../models/Media.js';
 import { DeviceSession } from '../models/DeviceSession.js';
 import { tunnelService } from '../services/tunnelService.js';
+import { googleDriveService } from '../services/googleDriveService.js';
+
+// Storage Overview (Remaining Space in Cloudinary & Google Drive)
+export const getStorageOverview = async (req, res) => {
+  try {
+    const config = await googleDriveService.getConfig();
+
+    // 1. Fetch Cloudinary stats
+    let cloudinaryStats = {
+      connected: true,
+      plan: 'Free',
+      storageUsedBytes: 0,
+      storageLimitBytes: 26843545600, // 25 GB default
+      formattedUsed: '0 MB',
+      formattedLimit: '25 GB',
+      formattedRemaining: '25 GB',
+      usedPercent: 0
+    };
+
+    try {
+      const usage = await cloudinary.api.usage();
+      const usedBytes = usage.storage?.usage || 0;
+      const limitBytes = (usage.credits?.limit || 25) * 1024 * 1024 * 1024;
+      const remainingBytes = Math.max(0, limitBytes - usedBytes);
+      const usedPercent = limitBytes > 0 ? parseFloat(((usedBytes / limitBytes) * 100).toFixed(1)) : 0;
+
+      cloudinaryStats = {
+        connected: true,
+        plan: usage.plan || 'Free',
+        storageUsedBytes: usedBytes,
+        storageLimitBytes: limitBytes,
+        formattedUsed: `${(usedBytes / (1024 * 1024)).toFixed(1)} MB`,
+        formattedLimit: `${(limitBytes / (1024 * 1024 * 1024)).toFixed(0)} GB`,
+        formattedRemaining: `${(remainingBytes / (1024 * 1024 * 1024)).toFixed(2)} GB`,
+        usedPercent
+      };
+    } catch (cErr) {
+      console.warn('[Cloudinary Usage Warning]:', cErr.message);
+    }
+
+    // 2. Fetch Google Drive stats
+    const driveStats = await googleDriveService.getStorageQuota();
+
+    res.json({
+      success: true,
+      data: {
+        activeStorageProvider: config.activeStorageProvider || 'cloudinary',
+        googleClientIdConfigured: !!(process.env.GOOGLE_CLIENT_ID || config.googleClientId),
+        cloudinary: cloudinaryStats,
+        googleDrive: driveStats
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// Switch Active Storage Provider ('cloudinary' vs 'google_drive')
+export const setActiveStorageProvider = async (req, res) => {
+  try {
+    const { provider } = req.body;
+    if (!['cloudinary', 'google_drive'].includes(provider)) {
+      return res.status(400).json({ success: false, error: 'Invalid provider' });
+    }
+
+    const config = await googleDriveService.getConfig();
+    if (provider === 'google_drive' && !config.googleDriveConnected) {
+      return res.status(400).json({
+        success: false,
+        error: 'Please connect Google Drive first before selecting it as active storage.'
+      });
+    }
+
+    config.activeStorageProvider = provider;
+    await config.save();
+
+    res.json({
+      success: true,
+      message: `Active storage switched to ${provider === 'google_drive' ? 'Google Drive' : 'Cloudinary'}!`,
+      activeStorageProvider: provider
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// Save Google API Credentials (Client ID & Secret)
+export const saveGoogleCredentials = async (req, res) => {
+  try {
+    const { clientId, clientSecret } = req.body;
+    const config = await googleDriveService.getConfig();
+    if (clientId) config.googleClientId = clientId.trim();
+    if (clientSecret) config.googleClientSecret = clientSecret.trim();
+    await config.save();
+    res.json({ success: true, message: 'Google Client credentials saved' });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// Generate Google OAuth2 URL
+export const getGoogleAuthUrl = async (req, res) => {
+  try {
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+    const host = req.headers['x-forwarded-host'] || req.get('host');
+    const redirectUri = `${protocol}://${host}/api/v1/admin/google/callback`;
+
+    const url = await googleDriveService.getAuthUrl(redirectUri);
+    res.json({ success: true, url, redirectUri });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// Google OAuth2 Callback
+export const handleGoogleCallback = async (req, res) => {
+  try {
+    const { code } = req.query;
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+    const host = req.headers['x-forwarded-host'] || req.get('host');
+    const redirectUri = `${protocol}://${host}/api/v1/admin/google/callback`;
+
+    if (!code) {
+      return res.redirect('/admin?google_error=Missing_Auth_Code');
+    }
+
+    await googleDriveService.handleCallback(code, redirectUri);
+    res.redirect('/admin?google_connected=true');
+  } catch (error) {
+    console.error('[Google Callback Error]:', error);
+    res.redirect(`/admin?google_error=${encodeURIComponent(error.message)}`);
+  }
+};
+
+// Disconnect Google Drive
+export const disconnectGoogleDrive = async (req, res) => {
+  try {
+    await googleDriveService.disconnect();
+    res.json({ success: true, message: 'Google Drive disconnected' });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
 
 // Tunnel Management
 export const getTunnelStatus = (req, res) => {
@@ -237,7 +380,43 @@ export const uploadMedia = async (req, res) => {
       resourceType = 'video'; // Cloudinary treats audio under 'video' resource_type
     }
 
-    // Stream upload directly from memory to Cloudinary
+    const mimeType = isMkv ? 'video/x-matroska' : file.mimetype;
+
+    // Check active storage provider
+    const config = await googleDriveService.getConfig();
+    const activeProvider = config.activeStorageProvider || 'cloudinary';
+
+    if (activeProvider === 'google_drive') {
+      if (!config.googleDriveConnected) {
+        return res.status(400).json({
+          success: false,
+          error: 'Google Drive is selected as storage, but is not connected yet. Please connect your Google Drive first.'
+        });
+      }
+
+      const driveResult = await googleDriveService.uploadFile(file.buffer, file.originalname, mimeType);
+
+      const newMedia = await Media.create({
+        title: title || file.originalname,
+        description: description || '',
+        mediaType,
+        mimeType,
+        fileSize: file.size,
+        storageProvider: 'google_drive',
+        googleDriveFileId: driveResult.fileId,
+        secureUrl: driveResult.fileId,
+        thumbnailUrl: '',
+        durationSeconds: 0
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: `${mediaType.toUpperCase()} uploaded to Google Drive successfully!`,
+        data: newMedia
+      });
+    }
+
+    // Default: Cloudinary Upload
     const uploadStream = () =>
       new Promise((resolve, reject) => {
         const stream = cloudinary.uploader.upload_stream(
@@ -270,14 +449,13 @@ export const uploadMedia = async (req, res) => {
       });
     }
 
-    const mimeType = isMkv ? 'video/x-matroska' : file.mimetype;
-
     const newMedia = await Media.create({
       title: title || file.originalname,
       description: description || '',
       mediaType,
       mimeType,
       fileSize: file.size,
+      storageProvider: 'cloudinary',
       cloudinaryPublicId: cloudResult.public_id,
       secureUrl: cloudResult.secure_url,
       thumbnailUrl,
@@ -317,11 +495,17 @@ export const deleteMedia = async (req, res) => {
       return res.status(404).json({ success: false, error: 'Media not found' });
     }
 
-    const resourceType = media.mediaType === 'image' ? 'image' : 'video';
-    await cloudinary.uploader.destroy(media.cloudinaryPublicId, { resource_type: resourceType });
+    if (media.storageProvider === 'google_drive') {
+      await googleDriveService.deleteFile(media.googleDriveFileId);
+    } else {
+      const resourceType = media.mediaType === 'image' ? 'image' : 'video';
+      if (media.cloudinaryPublicId) {
+        await cloudinary.uploader.destroy(media.cloudinaryPublicId, { resource_type: resourceType });
+      }
+    }
     await Media.findByIdAndDelete(id);
 
-    res.json({ success: true, message: 'Media deleted from Cloudinary and database' });
+    res.json({ success: true, message: 'Media deleted from storage and database' });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
