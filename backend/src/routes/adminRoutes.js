@@ -1,5 +1,8 @@
 import express from 'express';
 import multer from 'multer';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
 import { requireAdmin } from '../middleware/adminAuth.js';
 import {
   verifyAdmin,
@@ -30,11 +33,43 @@ import {
   verifyAdminLoginOtp
 } from '../controllers/adminAuthController.js';
 
-const storage = multer.memoryStorage();
+const tempUploadDir = path.join(os.tmpdir(), 'local_stream_uploads');
+if (!fs.existsSync(tempUploadDir)) {
+  fs.mkdirSync(tempUploadDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, tempUploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    cb(null, uniqueSuffix + '-' + file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_'));
+  }
+});
+
 const upload = multer({
   storage,
-  limits: { fileSize: 500 * 1024 * 1024 } // 500MB limit
+  limits: { fileSize: 10 * 1024 * 1024 * 1024 } // 10GB limit
 });
+
+const uploadMiddleware = (req, res, next) => {
+  upload.single('file')(req, res, (err) => {
+    if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({
+          success: false,
+          error: 'File size exceeds maximum supported limit (10 GB).'
+        });
+      }
+      return res.status(400).json({
+        success: false,
+        error: `File upload error: ${err.message}`
+      });
+    }
+    next();
+  });
+};
 
 export const createAdminRouter = (io, server) => {
   const router = express.Router();
@@ -96,8 +131,8 @@ export const createAdminRouter = (io, server) => {
   router.get('/devices', listActiveDevices);
   router.delete('/device/:id', revokeDevice);
 
-  // Media Management (Upload & Delete)
-  router.post('/upload', upload.single('file'), uploadMedia);
+  // Media Management (Upload & Delete with streaming disk storage for 10GB+)
+  router.post('/upload', uploadMiddleware, uploadMedia);
   router.get('/media', listAllMedia);
   router.delete('/media/:id', deleteMedia);
 

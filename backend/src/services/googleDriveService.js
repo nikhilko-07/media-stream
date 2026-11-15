@@ -1,5 +1,6 @@
 import { google } from 'googleapis';
 import { Readable } from 'stream';
+import fs from 'fs';
 import { AdminConfig } from '../models/AdminConfig.js';
 
 class GoogleDriveService {
@@ -186,6 +187,37 @@ class GoogleDriveService {
     config.googleDriveFolderId = folder.data.id;
     await config.save();
     return config.googleDriveFolderId;
+  }
+
+  async uploadFileFromDisk(filePath, originalName, mimeType) {
+    const drive = await this.getDriveClient();
+    if (!drive) throw new Error('Google Drive is not connected');
+
+    const folderId = await this.getOrCreateAppFolder(drive);
+    const fileStream = fs.createReadStream(filePath);
+    const fileStats = fs.statSync(filePath);
+
+    const fileMetadata = {
+      name: originalName,
+      parents: [folderId]
+    };
+
+    const media = {
+      mimeType,
+      body: fileStream
+    };
+
+    const res = await drive.files.create({
+      resource: fileMetadata,
+      media,
+      fields: 'id, name, webViewLink, webContentLink, size'
+    });
+
+    return {
+      fileId: res.data.id,
+      name: res.data.name,
+      size: res.data.size ? parseInt(res.data.size, 10) : fileStats.size
+    };
   }
 
   async uploadFile(fileBuffer, originalName, mimeType) {

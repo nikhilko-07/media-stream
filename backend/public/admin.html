@@ -233,8 +233,8 @@
               <input type="text" id="uploadTitle" placeholder="e.g. Vacation Video, Lo-Fi Track" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
             </div>
             <div>
-              <label class="block text-xs font-medium text-slate-300 mb-1">Select File (MP4, MKV, WebM, MP3, PNG, JPG)</label>
-              <input type="file" id="uploadFileInput" accept="video/mp4,video/x-matroska,.mkv,video/webm,video/*,audio/mpeg,audio/mp3,audio/*,image/*" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-300 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-600 file:text-white hover:file:bg-indigo-500 cursor-pointer" required>
+              <label class="block text-xs font-medium text-slate-300 mb-1">Select File (Any Format: MKV, MP4, AVI, MOV, WebM, MP3, etc.)</label>
+              <input type="file" id="uploadFileInput" accept="*/*,video/*,audio/*,image/*,.mkv,.mp4,.avi,.mov,.webm,.flv,.wmv,.m4v,.3gp,.ts,.mpg" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-300 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-600 file:text-white hover:file:bg-indigo-500 cursor-pointer" required>
             </div>
           </div>
 
@@ -1087,29 +1087,53 @@
       e.preventDefault();
       const fileInput = document.getElementById('uploadFileInput');
       const titleInput = document.getElementById('uploadTitle');
-      if (!fileInput.files[0]) return;
+      if (!fileInput.files[0]) {
+        alert('Please select a file to upload');
+        return;
+      }
 
+      const file = fileInput.files[0];
       const formData = new FormData();
-      formData.append('file', fileInput.files[0]);
-      formData.append('title', titleInput.value.trim() || fileInput.files[0].name);
+      formData.append('file', file);
+      formData.append('title', titleInput.value.trim() || file.name);
 
       const xhr = new XMLHttpRequest();
       xhr.open('POST', '/api/v1/admin/upload', true);
-      xhr.setRequestHeader('x-admin-key', currentAdminKey);
+
+      // Attach all auth headers (Token / Master Key)
+      const headers = getHeaders();
+      for (const [key, value] of Object.entries(headers)) {
+        xhr.setRequestHeader(key, value);
+      }
 
       const progressContainer = document.getElementById('uploadProgressContainer');
       const progressBar = document.getElementById('uploadProgressBar');
       const percentText = document.getElementById('uploadPercentText');
+      const statusText = document.getElementById('uploadStatusText');
       const uploadBtn = document.getElementById('uploadBtn');
 
       progressContainer.classList.remove('hidden');
       uploadBtn.disabled = true;
+
+      const totalSizeMb = (file.size / (1024 * 1024)).toFixed(1);
+      const isGigabytes = file.size >= 1024 * 1024 * 1024;
+      const formattedTotal = isGigabytes
+        ? (file.size / (1024 * 1024 * 1024)).toFixed(2) + ' GB'
+        : totalSizeMb + ' MB';
+
+      if (statusText) statusText.innerText = `Uploading ${file.name} (${formattedTotal})...`;
 
       xhr.upload.onprogress = (evt) => {
         if (evt.lengthComputable) {
           const percent = Math.round((evt.loaded / evt.total) * 100);
           progressBar.style.width = percent + '%';
           percentText.innerText = percent + '%';
+          const loadedFormatted = isGigabytes
+            ? (evt.loaded / (1024 * 1024 * 1024)).toFixed(2) + ' GB'
+            : (evt.loaded / (1024 * 1024)).toFixed(1) + ' MB';
+          if (statusText) {
+            statusText.innerText = `Uploading: ${loadedFormatted} / ${formattedTotal} (${percent}%)`;
+          }
         }
       };
 
@@ -1120,16 +1144,23 @@
         try {
           const resp = JSON.parse(xhr.responseText);
           if (resp.success) {
-            alert('Upload Successful!');
+            alert('✅ Upload Successful: ' + (resp.message || 'Media uploaded!'));
             fileInput.value = '';
             titleInput.value = '';
             fetchMediaList();
+            fetchStorageOverview();
           } else {
-            alert(resp.error || 'Upload error');
+            alert('❌ Upload Failed: ' + (resp.error || 'Server rejected upload'));
           }
         } catch (err) {
-          alert('Upload failed: ' + xhr.responseText);
+          alert('❌ Upload Failed: ' + (xhr.responseText || `Server returned HTTP ${xhr.status}`));
         }
+      };
+
+      xhr.onerror = () => {
+        uploadBtn.disabled = false;
+        progressContainer.classList.add('hidden');
+        alert('❌ Network connection error during upload. Please verify connection and retry.');
       };
 
       xhr.send(formData);

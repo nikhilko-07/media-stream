@@ -1,4 +1,5 @@
 import { Readable } from 'stream';
+import fs from 'fs';
 import os from 'os';
 import jwt from 'jsonwebtoken';
 import { cloudinary } from '../config/cloudinary.js';
@@ -408,8 +409,9 @@ export const revokeDevice = async (req, res) => {
   }
 };
 
-// Upload Video, Audio, or Image to Cloudinary & Save in MongoDB
+// Upload Video, Audio, or Image to Google Drive or Cloudinary & Save in MongoDB
 export const uploadMedia = async (req, res) => {
+  const filePath = req.file?.path;
   try {
     if (!req.file) {
       return res.status(400).json({ success: false, error: 'No file uploaded' });
@@ -418,20 +420,20 @@ export const uploadMedia = async (req, res) => {
     const { title, description } = req.body;
     const file = req.file;
 
-    // Detect mediaType with full MKV, MP4, WebM, Audio, Image support
+    // Detect mediaType with full MKV, MP4, WebM, AVI, MOV, Audio, Image support
     const isMkv = file.originalname.toLowerCase().endsWith('.mkv') || file.mimetype.includes('matroska');
     let mediaType = 'image';
     let resourceType = 'image';
 
-    if (file.mimetype.startsWith('video/') || isMkv) {
+    if (file.mimetype.startsWith('video/') || isMkv || file.originalname.match(/\.(mp4|mkv|webm|avi|mov|flv|wmv|3gp|ts)$/i)) {
       mediaType = 'video';
       resourceType = 'video';
-    } else if (file.mimetype.startsWith('audio/')) {
+    } else if (file.mimetype.startsWith('audio/') || file.originalname.match(/\.(mp3|wav|ogg|m4a|aac|flac)$/i)) {
       mediaType = 'audio';
       resourceType = 'video'; // Cloudinary treats audio under 'video' resource_type
     }
 
-    const mimeType = isMkv ? 'video/x-matroska' : file.mimetype;
+    const mimeType = isMkv ? 'video/x-matroska' : (file.mimetype || 'application/octet-stream');
 
     // Check active storage provider
     const config = await googleDriveService.getConfig();
@@ -441,11 +443,11 @@ export const uploadMedia = async (req, res) => {
       if (!config.googleDriveConnected) {
         return res.status(400).json({
           success: false,
-          error: 'Google Drive is selected as storage, but is not connected yet. Please connect your Google Drive first.'
+          error: 'Google Drive is selected as active storage, but is not connected yet. Please connect your Google Drive first in the Storage Hub above.'
         });
       }
 
-      const driveResult = await googleDriveService.uploadFile(file.buffer, file.originalname, mimeType);
+      const driveResult = await googleDriveService.uploadFileFromDisk(filePath, file.originalname, mimeType);
 
       const newMedia = await Media.create({
         title: title || file.originalname,
@@ -467,28 +469,24 @@ export const uploadMedia = async (req, res) => {
       });
     }
 
-    // Default: Cloudinary Upload
-    const uploadStream = () =>
-      new Promise((resolve, reject) => {
-        const stream = cloudinary.uploader.upload_stream(
-          {
-            folder: 'local_stream_hub',
-            resource_type: resourceType,
-            public_id: `${mediaType}_${Date.now()}`
-          },
-          (error, result) => {
-            if (error) return reject(error);
-            resolve(result);
-          }
-        );
-
-        const readableStream = new Readable();
-        readableStream.push(file.buffer);
-        readableStream.push(null);
-        readableStream.pipe(stream);
+    // Default: Cloudinary Upload (streaming from disk in chunks)
+    let cloudResult;
+    try {
+      cloudResult = await cloudinary.uploader.upload_large(filePath, {
+        folder: 'local_stream_hub',
+        resource_type: resourceType,
+        public_id: `${mediaType}_${Date.now()}`,
+        chunk_size: 20 * 1024 * 1024 // 20MB chunks
       });
-
-    const cloudResult = await uploadStream();
+    } catch (cErr) {
+      if (file.size > 100 * 1024 * 1024) {
+        return res.status(400).json({
+          success: false,
+          error: `File size is ${(file.size / (1024 * 1024 * 1024)).toFixed(1)} GB. Cloudinary free tier does not support video files over 100 MB. To upload large files (like this 3 GB file), please switch your storage provider to Google Drive in the dashboard (Google Drive provides 15 GB+ for free)!`
+        });
+      }
+      throw cErr;
+    }
 
     // Auto-generate video thumbnail or image preview (works for MKV and MP4)
     let thumbnailUrl = cloudResult.secure_url;
@@ -519,11 +517,21 @@ export const uploadMedia = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: `${mediaType.toUpperCase()} uploaded successfully!`,
+      message: `${mediaType.toUpperCase()} uploaded to Cloudinary successfully!`,
       data: newMedia
     });
   } catch (error) {
+    console.error('Upload media error:', error);
     res.status(500).json({ success: false, error: 'Upload failed', details: error.message });
+  } finally {
+    // Delete temporary disk file
+    if (filePath && fs.existsSync(filePath)) {
+      try {
+        fs.unlinkSync(filePath);
+      } catch (e) {
+        console.error('Failed to unlink temporary file:', e);
+      }
+    }
   }
 };
 
