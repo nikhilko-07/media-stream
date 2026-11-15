@@ -47,8 +47,18 @@ export const streamMedia = async (req, res) => {
       return res.redirect(media.secureUrl);
     }
 
+    // Determine target URL and Content-Type (MKV converted to MP4 container on-the-fly by Cloudinary for universal browser playback)
+    let streamUrl = media.secureUrl;
+    let contentType = media.mimeType;
+
+    const isMkv = (media.mimeType && media.mimeType.includes('matroska')) || media.secureUrl.toLowerCase().endsWith('.mkv');
+    if (media.mediaType === 'video' && isMkv) {
+      streamUrl = media.secureUrl.replace(/\.mkv$/i, '.mp4');
+      contentType = 'video/mp4';
+    }
+
     const range = req.headers.range;
-    const targetUrl = new URL(media.secureUrl);
+    const targetUrl = new URL(streamUrl);
     const client = targetUrl.protocol === 'https:' ? https : http;
 
     const options = {
@@ -59,12 +69,12 @@ export const streamMedia = async (req, res) => {
       options.headers['Range'] = range;
     }
 
-    client.get(media.secureUrl, options, (cloudRes) => {
+    client.get(streamUrl, options, (cloudRes) => {
       res.writeHead(cloudRes.statusCode || 200, {
         ...cloudRes.headers,
         'Accept-Ranges': 'bytes',
         'Cache-Control': 'no-store, private',
-        'Content-Type': media.mimeType
+        'Content-Type': contentType
       });
 
       cloudRes.pipe(res);

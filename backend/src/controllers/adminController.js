@@ -224,11 +224,12 @@ export const uploadMedia = async (req, res) => {
     const { title, description } = req.body;
     const file = req.file;
 
-    // Detect mediaType
+    // Detect mediaType with full MKV, MP4, WebM, Audio, Image support
+    const isMkv = file.originalname.toLowerCase().endsWith('.mkv') || file.mimetype.includes('matroska');
     let mediaType = 'image';
     let resourceType = 'image';
 
-    if (file.mimetype.startsWith('video/')) {
+    if (file.mimetype.startsWith('video/') || isMkv) {
       mediaType = 'video';
       resourceType = 'video';
     } else if (file.mimetype.startsWith('audio/')) {
@@ -259,7 +260,7 @@ export const uploadMedia = async (req, res) => {
 
     const cloudResult = await uploadStream();
 
-    // Auto-generate video thumbnail or image preview
+    // Auto-generate video thumbnail or image preview (works for MKV and MP4)
     let thumbnailUrl = cloudResult.secure_url;
     if (mediaType === 'video') {
       thumbnailUrl = cloudinary.url(cloudResult.public_id, {
@@ -269,11 +270,13 @@ export const uploadMedia = async (req, res) => {
       });
     }
 
+    const mimeType = isMkv ? 'video/x-matroska' : file.mimetype;
+
     const newMedia = await Media.create({
       title: title || file.originalname,
       description: description || '',
       mediaType,
-      mimeType: file.mimetype,
+      mimeType,
       fileSize: file.size,
       cloudinaryPublicId: cloudResult.public_id,
       secureUrl: cloudResult.secure_url,
