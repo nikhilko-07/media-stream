@@ -30,7 +30,7 @@ const upload = multer({
   limits: { fileSize: 500 * 1024 * 1024 } // 500MB limit
 });
 
-export const createAdminRouter = (io) => {
+export const createAdminRouter = (io, server) => {
   const router = express.Router();
 
   // Public callback from Google OAuth redirect (doesn't have x-admin-key header)
@@ -38,6 +38,27 @@ export const createAdminRouter = (io) => {
 
   // All routes below require Admin Key
   router.use(requireAdmin);
+
+  // Complete Server Shutdown & Port Release
+  router.post('/server/shutdown', (req, res) => {
+    res.json({
+      success: true,
+      message: 'Server process terminated. Port 9086 has been completely closed and released.'
+    });
+
+    console.log('\n🛑 [SHUTDOWN REQUEST] Admin stopped the webserver.');
+    console.log('🔌 Closing port 9086 and terminating process...\n');
+
+    setTimeout(() => {
+      if (server) {
+        server.close(() => {
+          process.exit(0);
+        });
+      } else {
+        process.exit(0);
+      }
+    }, 400);
+  });
 
   // Storage Overview & Provider Switcher
   router.get('/storage/status', getStorageOverview);

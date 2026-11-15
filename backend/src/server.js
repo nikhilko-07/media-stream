@@ -97,7 +97,7 @@ io.on('connection', (socket) => {
 
 // API Routes
 app.use('/api/v1/auth', authRoutes);
-app.use('/api/v1/admin', createAdminRouter(io));
+app.use('/api/v1/admin', createAdminRouter(io, server));
 app.use('/api/v1/media', mediaRoutes);
 
 // Frontend Routes

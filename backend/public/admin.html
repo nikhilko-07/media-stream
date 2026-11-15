@@ -30,8 +30,11 @@
       <a href="/" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-2 rounded-lg transition border border-slate-700 flex items-center gap-1.5">
         <i class="fa-solid fa-play"></i> Open User Portal
       </a>
-      <button onclick="logoutAdmin()" class="text-xs bg-rose-600/20 text-rose-300 hover:bg-rose-600/30 px-3 py-2 rounded-lg border border-rose-500/30 transition">
-        <i class="fa-solid fa-arrow-right-from-bracket"></i> Lock
+      <button onclick="logoutAdmin()" class="text-xs bg-slate-800 text-slate-300 hover:bg-slate-700 px-3 py-2 rounded-lg border border-slate-700 transition">
+        <i class="fa-solid fa-lock"></i> Lock
+      </button>
+      <button onclick="handleShutdownServer()" class="text-xs bg-rose-600 hover:bg-rose-500 text-white font-semibold px-3 py-2 rounded-lg transition shadow-lg shadow-rose-600/30 flex items-center gap-1.5" title="Completely stop and kill the webserver on port 9086">
+        <i class="fa-solid fa-power-off"></i> Stop Server
       </button>
     </div>
   </nav>
@@ -558,6 +561,36 @@
       }
     }
 
+    async function handleShutdownServer() {
+      if (!confirm('⚠️ Are you sure you want to completely STOP the webserver?\n\nPort 9086 will close, the connection will break, and the server process will exit.\n\nTo start it again, run "npm start" in terminal.')) {
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/v1/admin/server/shutdown', {
+          method: 'POST',
+          headers: getHeaders()
+        });
+        const data = await res.json();
+        alert('🛑 ' + data.message);
+        document.body.innerHTML = `
+          <div class="min-h-screen bg-slate-950 text-white flex items-center justify-center p-6 text-center font-sans">
+            <div class="max-w-md bg-slate-900 border border-slate-800 p-8 rounded-3xl space-y-4 shadow-2xl">
+              <div class="w-16 h-16 bg-rose-500/10 text-rose-400 rounded-2xl flex items-center justify-center mx-auto text-3xl border border-rose-500/20">
+                🔌
+              </div>
+              <h2 class="text-2xl font-bold">Webserver Stopped</h2>
+              <p class="text-xs text-slate-400 leading-relaxed">The server process has terminated and port 9086 is closed and released.</p>
+              <div class="text-[11px] text-slate-500 font-mono">PORT 9086: UNBOUND / OFFLINE</div>
+            </div>
+          </div>
+        `;
+      } catch (e) {
+        alert('Server terminated and connection closed.');
+        location.reload();
+      }
+    }
+
     async function openNetworkModal() {
       document.getElementById('networkModal').classList.remove('hidden');
       await fetchNetworkDetails();
@@ -625,6 +658,36 @@
         alert('Network error toggling local network');
       } finally {
         btn.disabled = false;
+      }
+    }
+
+    async function handleShutdownServer() {
+      if (!confirm('⚠️ Are you sure you want to completely STOP the webserver?\n\nPort 9086 will close, the connection will break, and the server process will exit.\n\nTo start it again, run "npm start" in terminal.')) {
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/v1/admin/server/shutdown', {
+          method: 'POST',
+          headers: getHeaders()
+        });
+        const data = await res.json();
+        alert('🛑 ' + data.message);
+        document.body.innerHTML = `
+          <div class="min-h-screen bg-slate-950 text-white flex items-center justify-center p-6 text-center font-sans">
+            <div class="max-w-md bg-slate-900 border border-slate-800 p-8 rounded-3xl space-y-4 shadow-2xl">
+              <div class="w-16 h-16 bg-rose-500/10 text-rose-400 rounded-2xl flex items-center justify-center mx-auto text-3xl border border-rose-500/20">
+                🔌
+              </div>
+              <h2 class="text-2xl font-bold">Webserver Stopped</h2>
+              <p class="text-xs text-slate-400 leading-relaxed">The server process has terminated and port 9086 is closed and released.</p>
+              <div class="text-[11px] text-slate-500 font-mono">PORT 9086: UNBOUND / OFFLINE</div>
+            </div>
+          </div>
+        `;
+      } catch (e) {
+        alert('Server terminated and connection closed.');
+        location.reload();
       }
     }
 
@@ -1093,6 +1156,36 @@
       }
     }
 
+    async function handleShutdownServer() {
+      if (!confirm('⚠️ Are you sure you want to completely STOP the webserver?\n\nPort 9086 will close, the connection will break, and the server process will exit.\n\nTo start it again, run "npm start" in terminal.')) {
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/v1/admin/server/shutdown', {
+          method: 'POST',
+          headers: getHeaders()
+        });
+        const data = await res.json();
+        alert('🛑 ' + data.message);
+        document.body.innerHTML = `
+          <div class="min-h-screen bg-slate-950 text-white flex items-center justify-center p-6 text-center font-sans">
+            <div class="max-w-md bg-slate-900 border border-slate-800 p-8 rounded-3xl space-y-4 shadow-2xl">
+              <div class="w-16 h-16 bg-rose-500/10 text-rose-400 rounded-2xl flex items-center justify-center mx-auto text-3xl border border-rose-500/20">
+                🔌
+              </div>
+              <h2 class="text-2xl font-bold">Webserver Stopped</h2>
+              <p class="text-xs text-slate-400 leading-relaxed">The server process has terminated and port 9086 is closed and released.</p>
+              <div class="text-[11px] text-slate-500 font-mono">PORT 9086: UNBOUND / OFFLINE</div>
+            </div>
+          </div>
+        `;
+      } catch (e) {
+        alert('Server terminated and connection closed.');
+        location.reload();
+      }
+    }
+
     async function openNetworkModal() {
       document.getElementById('networkModal').classList.remove('hidden');
       await fetchNetworkDetails();
@@ -1160,6 +1253,36 @@
         alert('Network error toggling local network');
       } finally {
         btn.disabled = false;
+      }
+    }
+
+    async function handleShutdownServer() {
+      if (!confirm('⚠️ Are you sure you want to completely STOP the webserver?\n\nPort 9086 will close, the connection will break, and the server process will exit.\n\nTo start it again, run "npm start" in terminal.')) {
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/v1/admin/server/shutdown', {
+          method: 'POST',
+          headers: getHeaders()
+        });
+        const data = await res.json();
+        alert('🛑 ' + data.message);
+        document.body.innerHTML = `
+          <div class="min-h-screen bg-slate-950 text-white flex items-center justify-center p-6 text-center font-sans">
+            <div class="max-w-md bg-slate-900 border border-slate-800 p-8 rounded-3xl space-y-4 shadow-2xl">
+              <div class="w-16 h-16 bg-rose-500/10 text-rose-400 rounded-2xl flex items-center justify-center mx-auto text-3xl border border-rose-500/20">
+                🔌
+              </div>
+              <h2 class="text-2xl font-bold">Webserver Stopped</h2>
+              <p class="text-xs text-slate-400 leading-relaxed">The server process has terminated and port 9086 is closed and released.</p>
+              <div class="text-[11px] text-slate-500 font-mono">PORT 9086: UNBOUND / OFFLINE</div>
+            </div>
+          </div>
+        `;
+      } catch (e) {
+        alert('Server terminated and connection closed.');
+        location.reload();
       }
     }
 
