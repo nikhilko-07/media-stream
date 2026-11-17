@@ -138,6 +138,12 @@ const localIp = getLocalWifiIp();
 const startServer = async () => {
   await connectDB();
   await initLocalSharingState();
+  
+  // Set extended timeouts for large file streaming
+  server.timeout = 0;
+  server.keepAliveTimeout = 300000;
+  server.headersTimeout = 305000;
+
   server.listen(PORT, HOST, () => {
     console.log(`\n============================================================`);
     console.log(`🎬 LOCAL STREAM SERVER IS RUNNING ON LOCAL WI-FI NETWORK:`);

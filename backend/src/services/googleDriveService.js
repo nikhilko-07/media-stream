@@ -220,6 +220,50 @@ class GoogleDriveService {
     };
   }
 
+  async createResumableUploadSession({ fileName, fileSize, mimeType, origin }) {
+    const drive = await this.getDriveClient();
+    if (!drive) throw new Error('Google Drive is not connected');
+
+    const oauth2 = drive.context._options.auth;
+    const token = await oauth2.getAccessToken();
+    const folderId = await this.getOrCreateAppFolder(drive);
+
+    const headers = {
+      'Authorization': `Bearer ${token.token}`,
+      'Content-Type': 'application/json; charset=UTF-8',
+      'X-Upload-Content-Type': mimeType || 'application/octet-stream'
+    };
+
+    if (fileSize) {
+      headers['X-Upload-Content-Length'] = String(fileSize);
+    }
+
+    if (origin) {
+      headers['Origin'] = origin;
+    }
+
+    const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        name: fileName,
+        parents: [folderId]
+      })
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Google Drive API error (${res.status}): ${errText}`);
+    }
+
+    const uploadUrl = res.headers.get('location');
+    if (!uploadUrl) {
+      throw new Error('Google Drive did not return a resumable upload location URL');
+    }
+
+    return { uploadUrl, folderId };
+  }
+
   async uploadFile(fileBuffer, originalName, mimeType) {
     const drive = await this.getDriveClient();
     if (!drive) throw new Error('Google Drive is not connected');

@@ -24,7 +24,9 @@ import {
   saveGoogleCredentials,
   getGoogleAuthUrl,
   handleGoogleCallback,
-  disconnectGoogleDrive
+  disconnectGoogleDrive,
+  createGoogleUploadSession,
+  completeGoogleUpload
 } from '../controllers/adminController.js';
 
 import {
@@ -112,6 +114,8 @@ export const createAdminRouter = (io, server) => {
   router.post('/google/credentials', saveGoogleCredentials);
   router.get('/google/auth-url', getGoogleAuthUrl);
   router.post('/google/disconnect', disconnectGoogleDrive);
+  router.post('/google/create-upload-session', createGoogleUploadSession);
+  router.post('/google/complete-upload', completeGoogleUpload);
 
   // Admin Verification (Accept both GET and POST)
   router.get('/verify', verifyAdmin);

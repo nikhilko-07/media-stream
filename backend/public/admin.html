@@ -433,6 +433,7 @@
   <script src="/socket.io/socket.io.js"></script>
   <script>
     const socket = io();
+    let currentActiveStorageProvider = 'cloudinary';
 
     function getHeaders() {
       const token = localStorage.getItem('STREAM_ADMIN_TOKEN');
@@ -862,6 +863,7 @@
     }
 
     function applyActiveProviderUI(provider) {
+      currentActiveStorageProvider = provider || 'cloudinary';
       const btnCloudinary = document.getElementById('providerBtnCloudinary');
       const btnGdrive = document.getElementById('providerBtnGdrive');
       const badgeCloudinary = document.getElementById('cloudinaryActiveBadge');
@@ -1042,8 +1044,8 @@
       }
     }
 
-    // Handle Upload
-    function handleUpload(e) {
+    // Handle Upload (Direct Resumable Upload to Google Drive for large 3GB+ files, or Standard Upload for Cloudinary)
+    async function handleUpload(e) {
       e.preventDefault();
       const fileInput = document.getElementById('uploadFileInput');
       const titleInput = document.getElementById('uploadTitle');
@@ -1053,9 +1055,139 @@
       }
 
       const file = fileInput.files[0];
+      const title = titleInput.value.trim() || file.name;
+      const progressContainer = document.getElementById('uploadProgressContainer');
+      const progressBar = document.getElementById('uploadProgressBar');
+      const percentText = document.getElementById('uploadPercentText');
+      const statusText = document.getElementById('uploadStatusText');
+      const uploadBtn = document.getElementById('uploadBtn');
+
+      const isGigabytes = file.size >= 1024 * 1024 * 1024;
+      const formattedTotal = isGigabytes
+        ? (file.size / (1024 * 1024 * 1024)).toFixed(2) + ' GB'
+        : (file.size / (1024 * 1024)).toFixed(1) + ' MB';
+
+      const isGoogleDriveActive = currentActiveStorageProvider === 'google_drive';
+      const isCloudDomain = window.location.hostname.includes('nikhilkohli.com') || window.location.hostname.includes('onrender.com');
+
+      // Warn if user is trying to upload >100MB through Cloudflare without Google Drive
+      if (isCloudDomain && file.size > 100 * 1024 * 1024 && !isGoogleDriveActive) {
+        alert(`⚠️ Cloudflare limits web uploads to 100 MB on public domains.\n\nYour file is ${formattedTotal}.\n\nTo upload this large file:\n1. Switch your storage to Google Drive in the Storage section above (Google Drive has no proxy limits!)\nOR\n2. Open this Admin portal on your local Wi-Fi link (e.g. http://localhost:9086/admin).`);
+        return;
+      }
+
+      progressContainer.classList.remove('hidden');
+      uploadBtn.disabled = true;
+      progressBar.style.width = '0%';
+      percentText.innerText = '0%';
+
+      // DIRECT RESUMABLE GOOGLE DRIVE UPLOAD (Bypasses Cloudflare & Render proxy limits completely)
+      if (isGoogleDriveActive) {
+        if (statusText) statusText.innerText = `Connecting to Google Drive (${formattedTotal})...`;
+
+        try {
+          // 1. Get resumable session URL from backend
+          const sessionRes = await fetch('/api/v1/admin/google/create-upload-session', {
+            method: 'POST',
+            headers: { ...getHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              fileName: file.name,
+              fileSize: file.size,
+              mimeType: file.type || 'application/octet-stream'
+            })
+          });
+
+          const sessionData = await sessionRes.json();
+          if (!sessionData.success || !sessionData.uploadUrl) {
+            throw new Error(sessionData.error || 'Failed to initialize Google Drive upload session');
+          }
+
+          if (statusText) statusText.innerText = `Streaming directly to Google Drive (${formattedTotal})...`;
+
+          // 2. Stream directly to Google Drive
+          const xhr = new XMLHttpRequest();
+          xhr.open('PUT', sessionData.uploadUrl, true);
+          xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+
+          xhr.upload.onprogress = (evt) => {
+            if (evt.lengthComputable) {
+              const percent = Math.round((evt.loaded / evt.total) * 100);
+              progressBar.style.width = percent + '%';
+              percentText.innerText = percent + '%';
+              const loadedFormatted = isGigabytes
+                ? (evt.loaded / (1024 * 1024 * 1024)).toFixed(2) + ' GB'
+                : (evt.loaded / (1024 * 1024)).toFixed(1) + ' MB';
+              if (statusText) {
+                statusText.innerText = `Uploading to Google Drive: ${loadedFormatted} / ${formattedTotal} (${percent}%)`;
+              }
+            }
+          };
+
+          xhr.onload = async () => {
+            if (xhr.status === 200 || xhr.status === 201) {
+              try {
+                if (statusText) statusText.innerText = `Saving media to library...`;
+                const gdriveFile = JSON.parse(xhr.responseText);
+
+                // 3. Complete and save in DB
+                const completeRes = await fetch('/api/v1/admin/google/complete-upload', {
+                  method: 'POST',
+                  headers: { ...getHeaders(), 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    fileId: gdriveFile.id,
+                    title,
+                    fileName: file.name,
+                    fileSize: file.size,
+                    mimeType: file.type || 'application/octet-stream'
+                  })
+                });
+
+                const completeData = await completeRes.json();
+                uploadBtn.disabled = false;
+                progressContainer.classList.add('hidden');
+                progressBar.style.width = '0%';
+
+                if (completeData.success) {
+                  fileInput.value = '';
+                  titleInput.value = '';
+                  fetchMediaList();
+                  fetchStorageOverview();
+                } else {
+                  alert('Uploaded to Google Drive, but database failed: ' + completeData.error);
+                }
+              } catch (e) {
+                uploadBtn.disabled = false;
+                progressContainer.classList.add('hidden');
+                alert('Database registration error: ' + e.message);
+              }
+            } else {
+              uploadBtn.disabled = false;
+              progressContainer.classList.add('hidden');
+              alert(`Google Drive rejected upload (${xhr.status}): ${xhr.responseText}`);
+            }
+          };
+
+          xhr.onerror = () => {
+            uploadBtn.disabled = false;
+            progressContainer.classList.add('hidden');
+            alert('Network connection error while uploading to Google Drive.');
+          };
+
+          xhr.send(file);
+          return;
+        } catch (driveErr) {
+          uploadBtn.disabled = false;
+          progressContainer.classList.add('hidden');
+          alert('Google Drive upload error: ' + driveErr.message);
+          return;
+        }
+      }
+
+      // STANDARD UPLOAD (Cloudinary / Local Server)
+      if (statusText) statusText.innerText = `Uploading (${formattedTotal})...`;
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('title', titleInput.value.trim() || file.name);
+      formData.append('title', title);
 
       const xhr = new XMLHttpRequest();
       xhr.open('POST', '/api/v1/admin/upload', true);
@@ -1064,23 +1196,6 @@
       for (const [key, value] of Object.entries(headers)) {
         xhr.setRequestHeader(key, value);
       }
-
-      const progressContainer = document.getElementById('uploadProgressContainer');
-      const progressBar = document.getElementById('uploadProgressBar');
-      const percentText = document.getElementById('uploadPercentText');
-      const statusText = document.getElementById('uploadStatusText');
-      const uploadBtn = document.getElementById('uploadBtn');
-
-      progressContainer.classList.remove('hidden');
-      uploadBtn.disabled = true;
-
-      const totalSizeMb = (file.size / (1024 * 1024)).toFixed(1);
-      const isGigabytes = file.size >= 1024 * 1024 * 1024;
-      const formattedTotal = isGigabytes
-        ? (file.size / (1024 * 1024 * 1024)).toFixed(2) + ' GB'
-        : totalSizeMb + ' MB';
-
-      if (statusText) statusText.innerText = `Uploading (${formattedTotal})...`;
 
       xhr.upload.onprogress = (evt) => {
         if (evt.lengthComputable) {
@@ -1111,7 +1226,11 @@
             alert('Upload error: ' + (resp.error || 'Server rejected file'));
           }
         } catch (err) {
-          alert('Upload failed (' + xhr.status + ')');
+          if (xhr.status === 413) {
+            alert('Upload rejected (413 Payload Too Large): Body limit exceeded. Switch to Google Drive or use your direct local Wi-Fi URL.');
+          } else {
+            alert('Upload failed (' + xhr.status + ')');
+          }
         }
       };
 

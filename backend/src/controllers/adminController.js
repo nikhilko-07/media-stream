@@ -569,3 +569,101 @@ export const deleteMedia = async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 };
+
+// Create Google Drive Resumable Upload Session URL for Direct Client Upload
+export const createGoogleUploadSession = async (req, res) => {
+  try {
+    const { fileName, fileSize, mimeType } = req.body;
+    if (!fileName) {
+      return res.status(400).json({ success: false, error: 'File name is required' });
+    }
+
+    const config = await googleDriveService.getConfig();
+    if (!config.googleDriveConnected) {
+      return res.status(400).json({
+        success: false,
+        error: 'Google Drive is not connected yet.'
+      });
+    }
+
+    // Determine client origin for CORS header
+    let origin = req.headers.origin;
+    if (!origin && req.headers.referer) {
+      try {
+        origin = new URL(req.headers.referer).origin;
+      } catch (e) {}
+    }
+
+    const { uploadUrl, folderId } = await googleDriveService.createResumableUploadSession({
+      fileName,
+      fileSize,
+      mimeType,
+      origin
+    });
+
+    res.json({
+      success: true,
+      uploadUrl,
+      folderId
+    });
+  } catch (error) {
+    console.error('Create Google upload session error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// Complete Google Drive Upload & Register Media in Database
+export const completeGoogleUpload = async (req, res) => {
+  try {
+    const { fileId, title, description, fileName, fileSize, mimeType } = req.body;
+    if (!fileId) {
+      return res.status(400).json({ success: false, error: 'Google Drive file ID is required' });
+    }
+
+    const drive = await googleDriveService.getDriveClient();
+    if (!drive) {
+      return res.status(400).json({ success: false, error: 'Google Drive is not connected' });
+    }
+
+    // Fetch verified file details from Google Drive
+    const driveFile = await drive.files.get({
+      fileId,
+      fields: 'id, name, size, mimeType'
+    });
+
+    const actualName = driveFile.data.name || fileName || 'Uploaded File';
+    const actualSize = parseInt(driveFile.data.size || fileSize || 0, 10);
+    const actualMime = driveFile.data.mimeType || mimeType || 'application/octet-stream';
+
+    const isMkv = actualName.toLowerCase().endsWith('.mkv') || actualMime.includes('matroska');
+    let mediaType = 'image';
+
+    if (actualMime.startsWith('video/') || isMkv || actualName.match(/\.(mp4|mkv|webm|avi|mov|flv|wmv|3gp|ts)$/i)) {
+      mediaType = 'video';
+    } else if (actualMime.startsWith('audio/') || actualName.match(/\.(mp3|wav|ogg|m4a|aac|flac)$/i)) {
+      mediaType = 'audio';
+    }
+
+    const newMedia = await Media.create({
+      title: title || actualName,
+      description: description || '',
+      mediaType,
+      mimeType: actualMime,
+      fileSize: actualSize,
+      storageProvider: 'google_drive',
+      googleDriveFileId: fileId,
+      secureUrl: fileId,
+      thumbnailUrl: '',
+      durationSeconds: 0
+    });
+
+    res.status(201).json({
+      success: true,
+      message: `${mediaType.toUpperCase()} successfully saved to Google Drive!`,
+      data: newMedia
+    });
+  } catch (error) {
+    console.error('Complete Google upload error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
