@@ -1009,28 +1009,34 @@
 
     async function handleApproveCode(e) {
       e.preventDefault();
-      const code = document.getElementById('manualPairCode').value.trim();
-      if (!code) return;
+      const input = document.getElementById('manualPairCode');
+      const code = input ? input.value.trim() : '';
+      if (!code) {
+        alert('Please enter a pairing code (e.g. 123-456)');
+        return;
+      }
       await approveDirectCode(code);
-      document.getElementById('manualPairCode').value = '';
+      if (input) input.value = '';
     }
 
-    async function approveDirectCode(pairingCode) {
+    async function approveDirectCode(code) {
       try {
+        const cleanCode = String(code || '').trim();
         const res = await fetch('/api/v1/admin/approve', {
           method: 'POST',
           headers: { ...getHeaders(), 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pairingCode })
+          body: JSON.stringify({ code: cleanCode, pairingCode: cleanCode })
         });
         const data = await res.json();
         if (data.success) {
+          alert('Device successfully approved!');
           fetchPendingDevices();
           fetchActiveDevicesCount();
         } else {
-          alert(data.error || 'Failed to approve');
+          alert(data.error || 'Failed to approve pairing code');
         }
       } catch (e) {
-        alert('Network error approving code');
+        alert('Network error approving code: ' + e.message);
       }
     }
 

@@ -346,12 +346,25 @@ export const listPendingDevices = async (req, res) => {
 // Approve Device Code & Emit Socket Notification
 export const approveDevice = (io) => async (req, res) => {
   try {
-    const { code } = req.body;
-    if (!code) {
+    let rawCode = req.body.code || req.body.pairingCode || '';
+    if (typeof rawCode !== 'string') rawCode = String(rawCode || '');
+    rawCode = rawCode.trim();
+
+    if (!rawCode) {
       return res.status(400).json({ success: false, error: 'Pairing code is required' });
     }
 
-    const session = await DeviceSession.findOne({ pairingCode: code.trim(), status: 'PENDING' });
+    // Support both 123456 and 123-456
+    let formattedCode = rawCode;
+    if (/^\d{6}$/.test(rawCode)) {
+      formattedCode = `${rawCode.slice(0, 3)}-${rawCode.slice(3)}`;
+    }
+
+    const session = await DeviceSession.findOne({
+      pairingCode: { $in: [rawCode, formattedCode] },
+      status: 'PENDING'
+    });
+
     if (!session) {
       return res.status(404).json({ success: false, error: 'Pairing code not found or expired' });
     }
@@ -369,15 +382,27 @@ export const approveDevice = (io) => async (req, res) => {
     session.approvedAt = new Date();
     await session.save();
 
-    // Notify waiting device in real-time
-    io.to(`pair_${code.trim()}`).emit('PAIRING_APPROVED', {
-      deviceAccessToken,
-      deviceName: session.deviceName
-    });
+    const displayName = session.deviceName || session.userAgent || 'Device';
+
+    // Notify waiting device in real-time across all possible room formats
+    if (io) {
+      io.to(`pair_${session.pairingCode}`).emit('PAIRING_APPROVED', {
+        deviceAccessToken,
+        deviceName: displayName
+      });
+      io.to(`pair_${rawCode}`).emit('PAIRING_APPROVED', {
+        deviceAccessToken,
+        deviceName: displayName
+      });
+      io.to(`pair_${formattedCode}`).emit('PAIRING_APPROVED', {
+        deviceAccessToken,
+        deviceName: displayName
+      });
+    }
 
     res.json({
       success: true,
-      message: `Device '${session.deviceName}' successfully admitted!`,
+      message: `Device '${displayName}' successfully admitted!`,
       data: session
     });
   } catch (error) {

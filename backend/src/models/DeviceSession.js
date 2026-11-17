@@ -20,6 +20,10 @@ const deviceSessionSchema = new mongoose.Schema(
       type: String,
       required: true
     },
+    deviceName: {
+      type: String,
+      default: 'Web Client'
+    },
     userAgent: {
       type: String,
       default: 'Unknown Device'

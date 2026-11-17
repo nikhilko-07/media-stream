@@ -131,6 +131,7 @@ export const createAdminRouter = (io, server) => {
 
   // Device Management (Admit / Revoke)
   router.get('/pending', listPendingDevices);
+  router.get('/devices/pending', listPendingDevices);
   router.post('/approve', approveDevice(io));
   router.get('/devices', listActiveDevices);
   router.delete('/device/:id', revokeDevice);

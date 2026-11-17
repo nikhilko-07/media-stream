@@ -193,11 +193,31 @@
       // Join socket room to await instant authorization
       socket.emit('JOIN_PAIRING_ROOM', `pair_${code}`);
 
-      socket.on('PAIRING_APPROVED', ({ deviceAccessToken }) => {
-        localStorage.setItem('MEDIA_DEVICE_TOKEN', deviceAccessToken);
-        deviceToken = deviceAccessToken;
+      let pollInterval = null;
+
+      function onApproved(accessToken) {
+        if (!accessToken) return;
+        if (pollInterval) clearInterval(pollInterval);
+        localStorage.setItem('MEDIA_DEVICE_TOKEN', accessToken);
+        deviceToken = accessToken;
         showMediaLibrary();
+      }
+
+      socket.off('PAIRING_APPROVED');
+      socket.on('PAIRING_APPROVED', ({ deviceAccessToken }) => {
+        onApproved(deviceAccessToken);
       });
+
+      // Polling fallback every 2s (ensures mobile/Ethernet devices connect even if socket disconnects)
+      pollInterval = setInterval(async () => {
+        try {
+          const pollRes = await fetch(`/api/v1/auth/pairing-status/${encodeURIComponent(code)}`);
+          const pollData = await pollRes.json();
+          if (pollData.success && pollData.status === 'APPROVED' && pollData.deviceAccessToken) {
+            onApproved(pollData.deviceAccessToken);
+          }
+        } catch (e) {}
+      }, 2000);
     }
 
     async function loadMediaCatalog() {

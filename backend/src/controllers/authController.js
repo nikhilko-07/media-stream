@@ -53,3 +53,43 @@ export const verifyDeviceStatus = async (req, res) => {
     res.status(401).json({ success: false, authorized: false, error: error.message });
   }
 };
+
+// Check pairing code status (Allows waiting client to poll if socket drops on mobile/Cloudflare)
+export const checkPairingStatus = async (req, res) => {
+  try {
+    let { code } = req.params;
+    if (!code) {
+      return res.status(400).json({ success: false, error: 'Pairing code is required' });
+    }
+
+    code = String(code).trim();
+    let formattedCode = code;
+    if (/^\d{6}$/.test(code)) {
+      formattedCode = `${code.slice(0, 3)}-${code.slice(3)}`;
+    }
+
+    const session = await DeviceSession.findOne({
+      pairingCode: { $in: [code, formattedCode] }
+    });
+
+    if (!session) {
+      return res.json({ success: true, status: 'EXPIRED' });
+    }
+
+    if (session.status === 'APPROVED' && session.deviceAccessToken) {
+      return res.json({
+        success: true,
+        status: 'APPROVED',
+        deviceAccessToken: session.deviceAccessToken,
+        deviceName: session.deviceName
+      });
+    }
+
+    res.json({
+      success: true,
+      status: session.status || 'PENDING'
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
